@@ -1,0 +1,16 @@
+# metrics/prometheus/prometheus-values.yaml
+prometheus:
+  prometheusSpec:
+    # allow Prometheus to discover ServiceMonitors without requiring the 'release' label
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+  service:
+    type: NodePort
+    nodePort: 30090  # Prometheus UI accessible at this node port (optional)
+grafana:
+  enabled: true
+  adminPassword: "admin"   # change in prod, but OK for dev
+  service:
+    type: NodePort
+    nodePort: 32322   # Grafana accessible on this port
