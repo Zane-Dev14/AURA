@@ -1,0 +1,13 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-service-monitor
+  namespace: monitoring   # must be same as Prometheus namespace
+spec:
+  selector:
+    matchLabels:
+      app: api           # must match your Service label
+  endpoints:
+    - port: "5001"          # the port your API exposes metrics on
+      path: /metrics
+      interval: 15s

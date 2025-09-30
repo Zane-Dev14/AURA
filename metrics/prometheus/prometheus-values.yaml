@@ -1,16 +1,31 @@
 # metrics/prometheus/prometheus-values.yaml
 prometheus:
   prometheusSpec:
-    # allow Prometheus to discover ServiceMonitors without requiring the 'release' label
-    serviceMonitorSelectorNilUsesHelmValues: false
     serviceMonitorSelector: {}
     serviceMonitorNamespaceSelector: {}
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
   service:
     type: NodePort
-    nodePort: 30090  # Prometheus UI accessible at this node port (optional)
+    nodePort: 30090
+
 grafana:
   enabled: true
-  adminPassword: "admin"   # change in prod, but OK for dev
+  adminPassword: "admin"
   service:
     type: NodePort
-    nodePort: 32322   # Grafana accessible on this port
+    nodePort: 32322
+
+prometheusOperator:
+  createCustomResource: true
+
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true

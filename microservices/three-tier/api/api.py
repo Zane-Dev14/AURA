@@ -11,6 +11,18 @@ api.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD", "password")
 api.config["MYSQL_DB"] = os.getenv("MYSQL_DB", "quotesdb")
 
 mysql = MySQL(api)
+from prometheus_client import Counter, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST
+
+REQUEST_COUNTER = Counter("api_requests_total", "Total API requests")
+
+@api.before_request
+def before_request():
+    REQUEST_COUNTER.inc()
+
+@api.route("/metrics")
+def metrics():
+    return generate_latest(), 200, {"Content-Type": CONTENT_TYPE_LATEST}
 
 
 @api.route("/api/quotes", methods=["GET"])
