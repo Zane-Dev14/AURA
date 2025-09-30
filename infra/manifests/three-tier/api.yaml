@@ -16,6 +16,13 @@ spec:
         - name: api
           image: project-api:local   # build from ./api
           imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+                cpu: 100m
+                memory: 128Mi
+            limits:
+                cpu: 500m
+                memory: 512Mi
           env:
             - name: DB_HOST
               value: db
@@ -25,6 +32,8 @@ spec:
               value: password
             - name: DB_NAME
               value: quotesdb
+
+
           ports:
             - containerPort: 5001
 ---
