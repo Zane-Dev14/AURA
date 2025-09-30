@@ -1,0 +1,15 @@
+apiVersion: k3d.io/v1alpha4
+kind: Simple
+metadata:
+  name: aura
+servers: 1
+agents: 2
+ports:
+  - port: 30090:30090 # expose Prometheus
+  - port: 32322:32322 # expose Grafana
+options:
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik
+        nodeFilters:
+          - server:0

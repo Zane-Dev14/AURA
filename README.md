@@ -57,6 +57,117 @@ chmod +x tools/deploy_stack.sh
 ./tools/deploy_stack.sh
 ```
 
+1️⃣ Prerequisites
+
+Install the following on your machine:
+
+Docker Desktop (with WSL 2 backend if on Windows)
+
+kubectl
+
+Helm
+
+k3d
+
+Check versions:
+
+docker --version
+kubectl version --client
+helm version
+k3d version
+
+2️⃣ Create k3d Cluster
+cd infra
+k3d cluster create aura --config k3d-cluster.yaml
+
+
+Exposes NodePorts for Prometheus (30090) and Grafana (32322).
+
+Cluster has 1 server + 2 agents.
+
+Set kubeconfig for your shell session:
+
+export KUBECONFIG=$(pwd)/kubeconfig-aura.yaml
+kubectl get nodes
+
+3️⃣ Install Prometheus + Grafana
+
+Add Helm repo:
+
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+
+Install stack:
+
+kubectl create namespace monitoring || true
+helm install kube-prom prometheus-community/kube-prometheus-stack \
+  -n monitoring -f metrics/prometheus/prometheus-values.yaml
+
+
+Verify pods:
+
+kubectl get pods -n monitoring
+kubectl get svc -n monitoring
+
+
+Access UIs in browser:
+
+Prometheus → http://localhost:30090
+
+Grafana → http://localhost:32322 (user: admin, pass: admin)
+
+4️⃣ Deploy Microservices
+
+Apply manifests:
+
+kubectl apply -f infra/manifests/three-tier/
+
+
+Check pods/services:
+
+kubectl get pods
+kubectl get svc
+
+
+Port-forward microservices for local testing:
+
+kubectl port-forward svc/api 5001:5001
+curl http://localhost:5001/metrics  # Should return Prometheus metrics
+
+5️⃣ Verify Metrics Pipeline
+
+Check Prometheus scrape targets:
+
+kubectl port-forward svc/kube-prom-kube-prometheus-prometheus 9090:9090 -n monitoring
+
+
+Open browser: http://localhost:9090/targets
+
+You should see api, app, node-exporters, and kube-state-metrics as UP.
+
+6️⃣ Optional — Grafana Dashboards
+
+Import dashboards via JSON in metrics/grafana/dashboards/.
+
+Or create dashboards manually in Grafana.
+
+7️⃣ Test Microservice + Metrics End-to-End
+# Forward Prometheus
+kubectl port-forward svc/kube-prom-kube-prometheus-prometheus 9090:9090 -n monitoring
+
+# Check metrics in Prometheus
+curl http://localhost:9090/api/v1/query?query=api_requests_total
+
+# Generate traffic
+kubectl port-forward svc/api 5001:5001
+curl http://localhost:5001/
+curl http://localhost:5001/metrics
+
+
+Prometheus should now record the requests.
+
+Grafana dashboards will update accordingly.
 **Check status**
 
 ```bash
