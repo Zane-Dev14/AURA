@@ -1,214 +1,266 @@
 #!/usr/bin/env python3
 """
-Safer preprocessing script for huge Alibaba CSVs.
+preprocess_alibaba_make_big_dataset.py (FIXED v3 - Production Safe)
 
-Features:
-- Defensive streaming with chunk fallback
-- Detects corrupt files early
-- Limits native threads to avoid C-extension races
-- Robust logging to identify which file/chunk causes issues
-- Memory-safe aggregation for top microservice
-- Produces dataset parts and final merged dataset
-
-Run: python3 preprocess_alibaba_safe.py
+Goal:
+- Produce a HIGH-QUALITY, BALANCED, and LARGE dataset.
+- Uses a 3-Pass streaming architecture to handle 5GB+ of files on 16GB RAM.
+- Pass 1: Memory-safe scan to find Top-K services.
+- Pass 2: Build a *filtered* in-memory index for only Top-K services.
+- Pass 3: Stream resource files, augment, and build the dataset.
+- We will filter "junk" (idle) rows.
+- We will *strategically oversample* rare actions (like scaling to 10 pods)
+  and *undersample* common actions (like staying at 1 pod).
 """
 import os
 import sys
-import glob
 import time
+import glob
+import csv
 import pickle
-import traceback
-###############################################################################
-# FAST GLOBAL RT INDEX (LOAD RT ONCE)
-###############################################################################
+from collections import defaultdict, Counter
+import math
 
-def build_global_rt_index(rt_files):
-    """
-    Fastest possible RT index builder.
-    Loads RT CSVs once, collects only (timestamp, msname, rps),
-    groups once at the end.
-    """
-    log("Building global RT index (fast mode).")
-
-    ts_list = []
-    name_list = []
-    rps_list = []
-
-    for rt_path in rt_files:
-        log(f"  Indexing RT file: {rt_path}")
-        try:
-            for chunk in stream_csv_safe(rt_path):
-                cols = chunk.columns.str.lower().str.strip()
-                chunk.columns = cols
-
-                if "metric" not in cols:
-                    continue
-
-                mask = chunk["metric"].str.contains("providerrpc_mcr", case=False, na=False)
-                filtered = chunk.loc[mask, ["timestamp", "msname", "value"]]
-
-                # append raw values directly (fast)
-                ts_list.extend(filtered["timestamp"].tolist())
-                name_list.extend(filtered["msname"].tolist())
-                rps_list.extend(filtered["value"].tolist())
-
-        except Exception as e:
-            log(f"  ⚠️ RT indexing failed in {rt_path}: {e}")
-            continue
-
-    if not ts_list:
-        log("⚠️ No RT rows found! Returning empty index.")
-        return {}
-
-    df = pd.DataFrame({"timestamp": ts_list,
-                       "msname": name_list,
-                       "value": rps_list})
-
-    df = (
-        df.groupby(["timestamp", "msname"])["value"]
-          .mean()
-          .reset_index()
-          .rename(columns={"value": "rps"})
-    )
-
-    log(f"Global RT index built with {len(df)} rows (optimized).")
-
-    # ✅ Convert to plain dict (int timestamp → float rps)
-    return {
-        (int(r.timestamp), r.msname): float(r.rps)
-        for r in df.itertuples()
-    }
-
-# Limit native thread libraries to reduce segfaults caused by race conditions
+# limit native threads
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("NUMEXPR_MAX_THREADS", "1")
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
-###############################################################################
-# CONFIG
-###############################################################################
+# --------------------- CONFIG ---------------------
+RESOURCE_GLOB = "data/MSResource/*.csv"
+RT_GLOB       = "data/MSRTQps/*.csv"
+TEMP_AGG_FILE = "temp_agg_rps.csv" # For Pass 1
 
-RESOURCE_DIR = "data/MSResource/*.csv"
-RT_DIR       = "data/MSRTQps/*.csv"
-TEMP_AGG_FILE = "temp_agg_rps.csv"
+RT_CHUNK_ROWS = 1_000_000
+TOP_K         = 50
+PART_SIZE     = 500_000        # 500k samples per part file
+OUTPUT_DIR    = "processed_parts_v3" # New folder
+FINAL_DATASET = "alibaba_dataset_large.pkl" # New name
+LOG_FILE      = "preprocess_log_v3.txt" # New log
 
-# Start conservative; will fall back to smaller chunk sizes on failure
-CHUNK_SIZE   = 2_000_000
-MIN_CHUNK    = 2_000_000
-PART_SIZE    = 250_000     # samples per output file
-OUTPUT_DIR   = "processed_parts"
-FINAL_DATASET = "alibaba_dataset.pkl"
-LOG_FILE = "preprocess_log.txt"
+# --- NEW QUALITY SETTINGS ---
+# We no longer care about total bytes. We care about *good* samples.
+MIN_RPS_FOR_AUGMENT = 10.0  # Don't augment "idle" data
+MAX_SAMPLES_HARD = 15_000_000  # 15M samples is ~1.1GB. Perfect for 16GB RAM.
+
+RNG_SEED = 123456
+# ----------------------------------------------------------------
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-###############################################################################
-# UTILITIES
-###############################################################################
-
 def log(msg):
-    t = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    line = f"[{t}] {msg}"
+    ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    line = f"[{ts}] {msg}"
     print(line)
     with open(LOG_FILE, "a") as f:
         f.write(line + "\n")
 
 def file_quick_check(path, nbytes=2048):
-    """Return True if the file seems readable text (not empty/binary)."""
     try:
         with open(path, "rb") as f:
             head = f.read(nbytes)
         if not head:
             log(f"⚠️ File empty: {path}")
             return False
-        # crude binary detection: lots of null bytes -> binary
         if head.count(b'\x00') > 5:
-            log(f"⚠️ File looks binary or corrupted (null bytes): {path}")
+            log(f"⚠️ File looks binary/corrupt: {path}")
             return False
         return True
     except Exception as e:
-        log(f"⚠️ Could not open file {path}: {e}")
+        log(f"⚠️ Cannot open file {path}: {e}")
         return False
 
-def stream_csv_safe(path, chunksize=CHUNK_SIZE):
+# ------------------- PASS 1: Find Top-K (Memory-Safe) -------------------
+def find_top_k_services_safe(rt_files, chunksize=RT_CHUNK_ROWS, top_k=TOP_K):
+    """
+    Memory-safe pass to find the top_k services by average RPS.
+    Writes aggregates to a temp file, then reads it.
+    """
+    log("Starting PASS 1: Finding Top-K microservices (memory-safe)...")
+    if os.path.exists(TEMP_AGG_FILE):
+        os.remove(TEMP_AGG_FILE)
+
+    header_written = False
+    
+    for path in rt_files:
+        log(f"  Scanning RT file: {path}")
+        if not file_quick_check(path):
+            continue
+        try:
+            for chunk in pd.read_csv(path, chunksize=chunksize, engine="c", on_bad_lines="skip", low_memory=False):
+                chunk.columns = chunk.columns.str.strip().str.lower()
+                required = {"msname", "metric", "value"}
+                if not required.issubset(set(chunk.columns)):
+                    continue
+
+                metric_col = chunk["metric"].astype(str)
+                mask = metric_col.str.contains("provider", case=False, na=False) | metric_col.str.contains("providerrpc_mcr", case=False, na=False)
+                sub = chunk.loc[mask, ["msname", "value"]].copy()
+                
+                sub["value"] = pd.to_numeric(sub["value"], errors="coerce")
+                sub = sub.dropna(subset=["value"])
+                if sub.empty:
+                    continue
+
+                # Aggregate sum and count for this chunk
+                agg_chunk = sub.groupby("msname")["value"].agg(["sum", "count"]).reset_index()
+                
+                # Append aggregates to temp file
+                agg_chunk.to_csv(TEMP_AGG_FILE, mode='a', header=not header_written, index=False)
+                header_written = True
+
+        except Exception as e:
+            log(f"  ⚠️ Error reading RT file {path}: {e}")
+            continue
+    
+    if not header_written:
+        log("❌ No RT metrics discovered. Aborting.")
+        return set()
+
+    # Now, read the *much smaller* aggregate file
+    log("  Aggregating temp file to find top-k...")
+    df_agg = pd.read_csv(TEMP_AGG_FILE)
+    df_final_agg = df_agg.groupby('msname').sum()
+    df_final_agg['avg_rps'] = df_final_agg['sum'] / df_final_agg['count']
+    
+    # Get the top-k service names
+    top_ms = df_final_agg.nlargest(top_k, 'avg_rps').index.tolist()
+    
+    log(f"  Selected top-{len(top_ms)} microservices.")
+    os.remove(TEMP_AGG_FILE)
+    return set(top_ms)
+
+# ------------------- PASS 2: Build Filtered RT Index -------------------
+def build_filtered_rt_index(rt_files, top_k_set, chunksize=RT_CHUNK_ROWS):
+    """
+    Pass 2: Stream RT files again, but only build an index
+    for the services in top_k_set.
+    """
+    log("Starting PASS 2: Building *filtered* RT index...")
+    buckets = defaultdict(list)
+
+    for path in rt_files:
+        log(f"  Indexing RT file: {path}")
+        if not file_quick_check(path):
+            continue
+        try:
+            for chunk in pd.read_csv(path, chunksize=chunksize, engine="c", on_bad_lines="skip", low_memory=False):
+                chunk.columns = chunk.columns.str.strip().str.lower()
+                required = {"timestamp", "msname", "metric", "value"}
+                if not required.issubset(set(chunk.columns)):
+                    continue
+
+                # 1. Filter for provider metrics
+                metric_col = chunk["metric"].astype(str)
+                mask = metric_col.str.contains("provider", case=False, na=False) | metric_col.str.contains("providerrpc_mcr", case=False, na=False)
+                sub = chunk.loc[mask].copy()
+
+                # 2. Filter for ONLY our top-k services
+                sub = sub[sub['msname'].isin(top_k_set)]
+                if sub.empty:
+                    continue
+                
+                sub["value"] = pd.to_numeric(sub["value"], errors="coerce")
+                sub = sub.dropna(subset=["value"])
+                
+                # 3. Add to buckets
+                for t, ms, v in sub[["timestamp", "msname", "value"]].itertuples(index=False, name=None):
+                    try:
+                        key = (int(float(t)), str(ms))
+                        buckets[key].append(float(v))
+                    except Exception:
+                        continue
+        except Exception as e:
+            log(f"  ⚠️ Error reading RT file {path}: {e}")
+            continue
+
+    # Collapse buckets to mean rps
+    rt_index = {}
+    for k, vs in buckets.items():
+        try:
+            rt_index[k] = float(np.mean(vs))
+        except Exception:
+            continue
+            
+    log(f"  Filtered RT index size: {len(rt_index)} entries.")
+    if not rt_index:
+        log("❌ Filtered RT index is empty. Check your data or TOP_K services. Aborting.")
+        sys.exit(1)
+        
+    return rt_index
+
+# ------------------- RESOURCE ROW STREAMING -------------------
+def stream_resource_rows(path):
+    """
+    Yield dicts for each row in the resource CSV.
+    Handles leading index column and normalizes header names to lowercase/stripped.
+    """
     if not file_quick_check(path):
-        raise RuntimeError(f"File failed quick-check: {path}")
+        raise RuntimeError(f"Quick-check failed: {path}")
+    with open(path, "r", newline="", encoding="utf-8", errors="replace") as fh:
+        reader = csv.reader(fh)
+        try:
+            header = next(reader)
+        except StopIteration:
+            return
+        header = [h.strip().lower() for h in header]
+        # drop leading empty/unnamed first column if present
+        if not header[0] or header[0].startswith("unnamed") or header[0].isdigit():
+            header = header[1:]
+        for row in reader:
+            # align lengths
+            if len(row) == len(header) + 1:
+                row = row[1:]
+            elif len(row) < len(header):
+                row = row + [""] * (len(header) - len(row))
+            elif len(row) > len(header):
+                row = row[:len(header)]
+            yield dict(zip(header, row))
 
+# ------------------- SAMPLE CREATION & AUGMENTATION -------------------
+def synthesize_replica_from_rps(rps_value):
+    """
+    Heuristic to create replica_count from rps.
+    Aggressive: 1 pod per 80 RPS.
+    """
     try:
-        reader = pd.read_csv(
-            path,
-            chunksize=chunksize,
-            engine="c",
-            on_bad_lines="skip",
-            low_memory=False
-        )
-        for chunk in reader:
-            yield chunk
-    except Exception as e:
-        log(f"❌ FATAL: CSV cannot be read by C-engine: {path} — {e}")
-        raise
+        r = float(rps_value)
+    except Exception:
+        r = 0.0
+    # Smarter heuristic: e.g., 1 pod per 80 RPS
+    rep = int(math.ceil(r / 80.0))
+    rep = max(1, min(rep, 10))
+    return rep
 
-###############################################################################
-# PASS 1: MEMORY-SAFE identify top microservice by average RPS
-###############################################################################
+def build_obs_from_row(cpu, mem, rps, rep):
+    """
+    Create 16-dim observation vector as used previously.
+    """
+    obs = np.zeros(16, dtype=np.float32)
+    obs[0] = float(cpu)
+    obs[1] = float(mem)
+    obs[5] = float(rps) / 500.0 # Normalize by a peak
+    obs[9] = float(rep) / 20.0
+    obs[10] = obs[9]
+    obs[11] = 1.0
+    return obs
 
-def find_top_microservice_and_rt_index(rt_files):
-    log("Starting scan to find top microservice + build RT index (single pass).")
+# ------------------- PASS 3: MAIN DATASET BUILD LOOP (MODIFIED) -------------------
+def make_large_dataset(res_files, rt_index, include_msnames):
+    """
+    Pass 3: Stream resource files, look up in filtered index,
+    and generate a high-quality, augmented, balanced dataset.
+    """
+    log("Starting PASS 3: Dataset creation (Quality-Focused Stream)...")
+    rng = np.random.default_rng(RNG_SEED)
 
-    agg = {}       # msname → {sum: X, count: Y}
-    rt_index = {}  # (timestamp, msname) → rps list
-
-    for rt_path in rt_files:
-        log(f"Scanning RT: {rt_path}")
-        for chunk in stream_csv_safe(rt_path):
-            chunk.columns = chunk.columns.str.lower().str.strip()
-
-            if "metric" not in chunk.columns:
-                continue
-
-            mask = chunk["metric"].str.contains("providerrpc_mcr", case=False, na=False)
-            sub = chunk.loc[mask, ["timestamp", "msname", "value"]]
-
-            # Aggregate for top microservice computation
-            g = sub.groupby("msname")["value"].agg(["sum","count"])
-            for ms, row in g.iterrows():
-                if ms not in agg:
-                    agg[ms] = {"sum":0, "count":0}
-                agg[ms]["sum"] += row["sum"]
-                agg[ms]["count"] += row["count"]
-
-            # Put raw values into RT index buffer
-            for t, name, v in sub.itertuples(index=False):
-                key = (int(t), name)
-                if key not in rt_index:
-                    rt_index[key] = []
-                rt_index[key].append(v)
-
-    # Compute average RPS and determine top microservice
-    ms_avg = {ms: data["sum"] / data["count"] for ms, data in agg.items()}
-    top_ms = max(ms_avg, key=ms_avg.get)
-
-    # Collapse RT index to mean values
-    rt_index_final = {k: float(np.mean(vs)) for k, vs in rt_index.items()}
-
-    log(f"Top microservice = {top_ms}")
-    log(f"RT index entries = {len(rt_index_final)}")
-
-    return top_ms, rt_index_final
-
-###############################################################################
-# PASS 2: Build dataset for single microservice (defensive streaming)
-###############################################################################
-
-def build_dataset(res_files, rt_index, top_ms):
-    log(f"Building dataset for microservice: {top_ms}")
-
-    dataset_part = []
     part_id = 0
-    total_count = 0
+    dataset_part = []
+    total_samples = 0
+    action_counts = Counter()
 
     def save_part():
         nonlocal dataset_part, part_id
@@ -217,194 +269,181 @@ def build_dataset(res_files, rt_index, top_ms):
         out_path = os.path.join(OUTPUT_DIR, f"dataset_part_{part_id}.pkl")
         with open(out_path, "wb") as f:
             pickle.dump(dataset_part, f)
-        log(f"Saved {len(dataset_part)} samples → {out_path}")
+        log(f"  Saved part {part_id}: {len(dataset_part)} samples -> {out_path}")
         dataset_part = []
         part_id += 1
 
-    # We'll build a small in-memory index per chunk for RT to join by timestamp+msname.
-    # Iterate over resource files and for each resource chunk, load relevant rt rows from the corresponding RT file chunks.
-    # If counts mismatch or pairing is unclear, we will load the whole RT file chunk into a dict keyed by (timestamp, msname).
-
     for res_path in res_files:
-        # Heuristic to find RT file with similar base name; fallback to iterate all RTs (slower
-
-        log(f"Processing Resource file: {res_path}")
-
-
+        log(f"  Streaming resource file: {res_path}")
         if not file_quick_check(res_path):
-            log(f"Skipping unreadable resource file: {res_path}")
+            log(f"  Skipping unreadable resource file: {res_path}")
             continue
-
         try:
-            res_stream = stream_csv_safe(res_path)
-        except RuntimeError as e:
-            log(f"Failed to stream resource file {res_path}: {e}")
+            for row_idx, row in enumerate(stream_resource_rows(res_path)):
+                msname = (row.get("msname") or "").strip()
+                if not msname or msname not in include_msnames:
+                    continue
+
+                ts_raw = row.get("timestamp", "")
+                try:
+                    ts = int(float(ts_raw)) if ts_raw != "" else 0
+                except Exception:
+                    ts = 0
+
+                # Use the *actual* Alibaba column names, fallback to simple
+                cpu_raw = row.get("instance_cpu_usage") or row.get("cpu_utilization") or row.get("cpu") or "0"
+                mem_raw = row.get("instance_memory_usage") or row.get("memory_utilization") or row.get("memory") or "0"
+                try:
+                    cpu = float(cpu_raw)
+                    mem = float(mem_raw)
+                except Exception:
+                    cpu = 0.0
+                    mem = 0.0
+                
+                rps = rt_index.get((int(ts), msname), 0.0)
+
+                # --- 1. FILTER "JUNK" ROWS ---
+                if rps < 1.0 and cpu < 0.05:
+                    if rng.random() > 0.01: # 1% chance to keep it anyway
+                        continue
+
+                rep = synthesize_replica_from_rps(rps)
+                action = int(max(0, min(9, rep - 1)))
+                obs = build_obs_from_row(cpu, mem, rps, rep)
+
+                # --- 2. STRATEGIC AUGMENTATION ---
+                num_copies = 1 # Start with 1 copy (the original)
+                
+                if rps > MIN_RPS_FOR_AUGMENT:
+                    if action == 0:
+                        # UNDERSAMPLE the common "1 pod" case
+                        num_copies += 1 if rng.random() < 0.2 else 0 # 20% chance of 1 augmentation
+                    elif action in [1, 2, 3]:
+                        # Slightly oversample
+                        num_copies += rng.integers(1, 4) # Add 1-3 copies
+                    else:
+                        # Aggressively OVERSAMPLE rare, high-stress actions
+                        num_copies += rng.integers(5, 15) # Add 5-14 copies
+
+                for _ in range(num_copies):
+                    if total_samples >= MAX_SAMPLES_HARD:
+                        break
+                    
+                    if total_samples == 0: # First sample is always original
+                        aug_obs = obs
+                    else:
+                        # Create an augmented copy
+                        aug_obs = obs.copy()
+                        aug_obs[0] = float(max(0.0, aug_obs[0] * (1.0 + rng.normal(0, 0.03)))) # CPU noise
+                        aug_obs[1] = float(max(0.0, aug_obs[1] * (1.0 + rng.normal(0, 0.03)))) # Mem noise
+                        aug_obs[5] = float(max(0.0, aug_obs[5] * (1.0 + rng.normal(0, 0.05)))) # RPS noise
+                    
+                    dataset_part.append((aug_obs, action))
+                    total_samples += 1
+                    action_counts[action] += 1
+
+                if len(dataset_part) >= PART_SIZE:
+                    save_part()
+
+                if total_samples >= MAX_SAMPLES_HARD:
+                    log(f"Reached hard sample limit: {MAX_SAMPLES_HARD}")
+                    break
+            
+            if total_samples >= MAX_SAMPLES_HARD:
+                break
+        
+        except Exception as e:
+            log(f"  ⚠️ Error streaming resource {res_path} at row ~{row_idx}: {e}")
             continue
 
-        # For each resource chunk, we will read through RT candidates and try to find matches.
-        for res_chunk_idx, res_chunk in enumerate(res_stream):
-            try:
-                res_chunk.columns = res_chunk.columns.str.lower().str.strip()
-            except Exception:
-                log(f"  ⚠️ Failed to sanitize resource columns for chunk {res_chunk_idx} in {res_path}. Skipping chunk.")
-                continue
+        if total_samples >= MAX_SAMPLES_HARD:
+            break
 
-            # compute replica counts per (timestamp, msname)
-            try:
-                replicas = (
-                    res_chunk.groupby(['timestamp','msname'])['msinstanceid']
-                    .nunique()
-                    .reset_index()
-                    .rename(columns={'msinstanceid':'replica_count'})
-                )
-            except Exception as e:
-                log(f"  ⚠️ Replica grouping failed for chunk {res_chunk_idx} in {res_path}: {e}. Skipping chunk.")
-                continue
+    save_part() # flush remaining
+    
+    log(f"Dataset creation complete: total samples={total_samples}")
+    log("Final Action Distribution:")
+    for i in range(10):
+        log(f"  Action {i} ({(i+1)} pods): {action_counts.get(i, 0)} samples")
+        
+    return total_samples
 
-            # find and prepare CPU/MEM columns robustly
-            # ✅ Use the *actual* Alibaba column names
-           cpu = res_chunk.get("instance_cpu_usage", pd.Series(0, index=res_chunk.index))
-            mem = res_chunk.get("instance_memory_usage", pd.Series(0, index=res_chunk.index))
-
-            state_res = (
-                pd.DataFrame({
-                    "timestamp": res_chunk["timestamp"],
-                    "msname": res_chunk["msname"],
-                    "cpu_utilization": cpu,
-                    "memory_utilization": mem
-                })
-                .groupby(["timestamp","msname"])[["cpu_utilization","memory_utilization"]]
-                .mean()
-                .reset_index()
-            )
-
-
-            # Now build RT index for this set of timestamps in this resource chunk.
-            # We'll load RT rows from candidate RT files that match timestamps in this res_chunk.
-            # ✅ Use fast O(1) lookup from prebuilt RT index
-            # ✅ Vectorized RT lookup (much faster)
-            keys = list(zip(replicas["timestamp"].astype(int), replicas["msname"]))
-            rps_vals = [rt_index.get(k, 0.0) for k in keys]
-
-            df_rps = replicas[["timestamp", "msname"]].copy()
-            df_rps["rps"] = rps_vals
-
-
-            # merge
-            try:
-                merged = (
-                    state_res.merge(replicas, on=['timestamp','msname'], how='outer')
-                             .merge(df_rps, on=['timestamp','msname'], how='left')
-                             .fillna(0)
-                )
-            except Exception as e:
-                log(f"  ⚠️ Merge failed for chunk {res_chunk_idx} in {res_path}: {e}. Skipping.")
-                continue
-
-            # filter for top_ms
-            merged = merged[merged['msname'] == top_ms]
-            if merged.empty:
-                continue
-
-            # build samples
-            cpu = merged["cpu_utilization"].astype(np.float32).to_numpy()
-            mem = merged["memory_utilization"].astype(np.float32).to_numpy()
-            rps = (merged["rps"] / 500.0).astype(np.float32).to_numpy()
-            rep = merged["replica_count"].clip(1, 10).astype(np.int32).to_numpy()
-
-            obs_block = np.zeros((len(merged), 16), dtype=np.float32)
-            obs_block[:,0]  = cpu
-            obs_block[:,1]  = mem
-            obs_block[:,5]  = rps
-            obs_block[:,9]  = rep / 20.0
-            obs_block[:,10] = obs_block[:,9]
-            obs_block[:,11] = 1.0
-
-            actions = (rep - 1).tolist()
-
-            batch = list(zip(obs_block, actions))
-            dataset_part.extend(batch)
-            total_count += len(batch)
-
-            
-
-            if len(dataset_part) >= PART_SIZE:
-                save_part()
-
-    # final save
-    save_part()
-    log(f"Finished building dataset. Total samples: {total_count}")
-    return total_count
-
-###############################################################################
-# PASS 3: Merge parts into final pkl
-###############################################################################
-
-def merge_parts():
-    log("Merging dataset parts...")
-    part_files = sorted(glob.glob(os.path.join(OUTPUT_DIR, "dataset_part_*.pkl")))
-    if not part_files:
-        log("No part files found; merge aborted.")
-        return
-
-    final_list = []
-    for p in part_files:
+# ------------------- MERGE PARTS -------------------
+def merge_parts(final_path=FINAL_DATASET):
+    log("Merging part files into final pickle...")
+    parts = sorted(glob.glob(os.path.join(OUTPUT_DIR, "dataset_part_*.pkl")))
+    if not parts:
+        log("No parts found. Nothing to merge.")
+        return 0
+    
+    merged = []
+    total_samples = 0
+    for p in parts:
         try:
             with open(p, "rb") as f:
                 batch = pickle.load(f)
-            final_list.extend(batch)
-            log(f"Loaded {p} ({len(batch)} samples). Accum total: {len(final_list)}")
+            merged.extend(batch)
+            log(f"  Loaded {p} ({len(batch)} samples). Total: {len(merged)}")
         except Exception as e:
-            log(f"Failed to load part {p}: {e}")
+            log(f"  Failed to load {p}: {e}")
 
-    with open(FINAL_DATASET, "wb") as f:
-        pickle.dump(final_list, f)
-    log(f"Final dataset saved: {FINAL_DATASET} (Total samples: {len(final_list)})")
+    # Shuffle final dataset
+    log(f"Shuffling {len(merged)} total samples...")
+    rng = np.random.default_rng(RNG_SEED)
+    rng.shuffle(merged)
+    
+    log(f"Writing final pickle file: {final_path}")
+    with open(final_path, "wb") as f:
+        pickle.dump(merged, f)
+    
+    log(f"Final pickle written: {final_path} ({len(merged)} samples).")
+    
+    # Cleanup
+    log("Cleaning up part files...")
+    for p in parts:
+        try: os.remove(p)
+        except Exception: pass
+    try: os.rmdir(OUTPUT_DIR)
+    except Exception: pass
 
-    # cleanup
-    for p in part_files:
-        try:
-            os.remove(p)
-        except Exception:
-            pass
-    try:
-        os.rmdir(OUTPUT_DIR)
-    except Exception:
-        pass
-    log("Cleanup complete.")
+    return len(merged)
 
-###############################################################################
-# MAIN
-###############################################################################
-
+# ------------------- MAIN -------------------
 def main():
     start = time.time()
-    res_files = sorted(glob.glob(RESOURCE_DIR))
-    rt_files  = sorted(glob.glob(RT_DIR))
+    res_files = sorted(glob.glob(RESOURCE_GLOB))
+    rt_files = sorted(glob.glob(RT_GLOB))
 
     if not res_files:
-        log(f"ERROR: No resource files found with pattern: {RESOURCE_DIR}")
+        log(f"ERROR: No resource files found matching {RESOURCE_GLOB}")
         sys.exit(1)
     if not rt_files:
-        log(f"ERROR: No RT files found with pattern: {RT_DIR}")
+        log(f"ERROR: No RT files found matching {RT_GLOB}")
         sys.exit(1)
 
     log(f"Found {len(res_files)} resource files and {len(rt_files)} RT files.")
 
-    # Sanity quick-print of first few file names
-    log("Resource files (first 5): " + ", ".join(os.path.basename(p) for p in res_files[:5]))
-    log("RT files (first 5): " + ", ".join(os.path.basename(p) for p in rt_files[:5]))
-
-    top_ms, rt_index = find_top_microservice_and_rt_index(rt_files)
-    if not top_ms:
+    # 1) Build RT index and pick top microservices
+    top_ms_set = find_top_k_services_safe(rt_files, chunksize=RT_CHUNK_ROWS, top_k=TOP_K)
+    if not top_ms_set:
         log("Top microservice detection failed. Exiting.")
         sys.exit(1)
+    
+    log(f"Top {len(top_ms_set)} services selected for dataset.")
 
-    build_dataset(res_files, rt_index, top_ms)
-    merge_parts()
+    # 2) Build FILTERED index for only these top services
+    rt_index = build_filtered_rt_index(rt_files, top_ms_set, chunksize=RT_CHUNK_ROWS)
 
-    end = time.time()
-    log(f"ALL DONE in {end - start:.1f} seconds.")
+    # 3) Create dataset streaming resource rows and augmenting
+    samples = make_large_dataset(res_files, rt_index, top_ms_set)
+
+    # 4) Merge parts into final pickle
+    merged_count = merge_parts(FINAL_DATASET)
+
+    elapsed = time.time() - start
+    log(f"ALL DONE in {elapsed:.1f}s. Final samples: {merged_count}. Final file: {FINAL_DATASET}")
 
 if __name__ == "__main__":
     main()
+
+
