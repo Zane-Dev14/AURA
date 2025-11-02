@@ -8,7 +8,7 @@ from boutique_env import K8sAutoscaleEnv
 import matplotlib.pyplot as plt
 
 
-def run_random_policy(env, num_episodes=10):
+def run_random_policy(env, num_episodes=1000):
     """Random baseline - worst case"""
     print("\n" + "=" * 70)
     print("RANDOM POLICY BASELINE")
@@ -44,7 +44,7 @@ def run_random_policy(env, num_episodes=10):
     return {'reward': avg_reward, 'cost': avg_cost, 'sla': avg_sla}
 
 
-def run_hpa_policy(env, target_cpu=0.75, num_episodes=10):
+def run_hpa_policy(env, target_cpu=0.75, num_episodes=1000):
     """HPA baseline - what we want to beat"""
     print("\n" + "=" * 70)
     print(f"HPA POLICY BASELINE (target CPU: {target_cpu*100:.0f}%)")

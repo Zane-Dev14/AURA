@@ -150,7 +150,7 @@ def test_observation_features():
     obs = sim.reset(seed=200)
     
     # Run a few steps to populate history
-    for _ in range(3):
+    for _ in range(300):
         actions = {agent: 2 for agent in sim.agent_ids}
         obs, _, _, _ = sim.step(actions)
     
