@@ -1,409 +1,260 @@
 #!/usr/bin/env python3
 """
-Safer preprocessing script for huge Alibaba CSVs.
+train.py (Final Upgraded Version)
 
 Features:
-- Defensive streaming with chunk fallback
-- Detects corrupt files early
-- Limits native threads to avoid C-extension races
-- Robust logging to identify which file/chunk causes issues
-- Memory-safe aggregation for top microservice
-- Produces dataset parts and final merged dataset
-
-Run: python3 preprocess_alibaba_safe.py
+- Warm-start from previous model even with architecture changes.
+- Larger neural network (256-256-128).
+- GELU activations.
+- Weighted Loss for class imbalance.
+- LR Scheduler.
+- Validation split.
+- Smarter leak-masking.
+- Mixed precision support.
+- GPU cooldown every 30 epochs.
 """
-import os
-import sys
-import glob
-import time
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader, random_split
 import pickle
-import traceback
-###############################################################################
-# FAST GLOBAL RT INDEX (LOAD RT ONCE)
-###############################################################################
-
-def build_global_rt_index(rt_files):
-    """
-    Fastest possible RT index builder.
-    Loads RT CSVs once, collects only (timestamp, msname, rps),
-    groups once at the end.
-    """
-    log("Building global RT index (fast mode).")
-
-    ts_list = []
-    name_list = []
-    rps_list = []
-
-    for rt_path in rt_files:
-        log(f"  Indexing RT file: {rt_path}")
-        try:
-            for chunk in stream_csv_safe(rt_path):
-                cols = chunk.columns.str.lower().str.strip()
-                chunk.columns = cols
-
-                if "metric" not in cols:
-                    continue
-
-                mask = chunk["metric"].str.contains("providerrpc_mcr", case=False, na=False)
-                filtered = chunk.loc[mask, ["timestamp", "msname", "value"]]
-
-                # append raw values directly (fast)
-                ts_list.extend(filtered["timestamp"].tolist())
-                name_list.extend(filtered["msname"].tolist())
-                rps_list.extend(filtered["value"].tolist())
-
-        except Exception as e:
-            log(f"  ⚠️ RT indexing failed in {rt_path}: {e}")
-            continue
-
-    if not ts_list:
-        log("⚠️ No RT rows found! Returning empty index.")
-        return {}
-
-    df = pd.DataFrame({"timestamp": ts_list,
-                       "msname": name_list,
-                       "value": rps_list})
-
-    df = (
-        df.groupby(["timestamp", "msname"])["value"]
-          .mean()
-          .reset_index()
-          .rename(columns={"value": "rps"})
-    )
-
-    log(f"Global RT index built with {len(df)} rows (optimized).")
-
-    # ✅ Convert to plain dict (int timestamp → float rps)
-    return {
-        (int(r.timestamp), r.msname): float(r.rps)
-        for r in df.itertuples()
-    }
-
-# Limit native thread libraries to reduce segfaults caused by race conditions
-os.environ.setdefault("OMP_NUM_THREADS", "1")
-os.environ.setdefault("MKL_NUM_THREADS", "1")
-os.environ.setdefault("NUMEXPR_MAX_THREADS", "1")
-
-import pandas as pd
 import numpy as np
+import time
+import warnings
+warnings.filterwarnings("ignore")
 
-###############################################################################
-# CONFIG
-###############################################################################
+# ============================================================
+# 1. IMPROVED Q-Network
+# ============================================================
 
-RESOURCE_DIR = "data/MSResource/*.csv"
-RT_DIR       = "data/MSRTQps/*.csv"
-TEMP_AGG_FILE = "temp_agg_rps.csv"
+class QNetwork(nn.Module):
+    def __init__(self, obs_dim, action_dim):
+        super(QNetwork, self).__init__()
 
-# Start conservative; will fall back to smaller chunk sizes on failure
-CHUNK_SIZE   = 2_000_000
-MIN_CHUNK    = 250_000
-PART_SIZE    = 250_000     # samples per output file
-OUTPUT_DIR   = "processed_parts"
-FINAL_DATASET = "alibaba_dataset.pkl"
-LOG_FILE = "preprocess_log.txt"
+        self.net = nn.Sequential(
+            nn.Linear(obs_dim, 256),
+            nn.GELU(),
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+            nn.Linear(256, 256),
+            nn.GELU(),
 
-###############################################################################
-# UTILITIES
-###############################################################################
+            nn.Linear(256, 128),
+            nn.GELU(),
 
-def log(msg):
-    t = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    line = f"[{t}] {msg}"
-    print(line)
-    with open(LOG_FILE, "a") as f:
-        f.write(line + "\n")
-
-def file_quick_check(path, nbytes=2048):
-    """Return True if the file seems readable text (not empty/binary)."""
-    try:
-        with open(path, "rb") as f:
-            head = f.read(nbytes)
-        if not head:
-            log(f"⚠️ File empty: {path}")
-            return False
-        # crude binary detection: lots of null bytes -> binary
-        if head.count(b'\x00') > 5:
-            log(f"⚠️ File looks binary or corrupted (null bytes): {path}")
-            return False
-        return True
-    except Exception as e:
-        log(f"⚠️ Could not open file {path}: {e}")
-        return False
-
-def stream_csv_safe(path, chunksize=CHUNK_SIZE):
-    if not file_quick_check(path):
-        raise RuntimeError(f"File failed quick-check: {path}")
-
-    try:
-        reader = pd.read_csv(
-            path,
-            chunksize=chunksize,
-            engine="c",
-            on_bad_lines="skip",
-            low_memory=False
+            nn.Linear(128, action_dim)
         )
-        for chunk in reader:
-            yield chunk
-    except Exception as e:
-        log(f"❌ FATAL: CSV cannot be read by C-engine: {path} — {e}")
-        raise
 
-###############################################################################
-# PASS 1: MEMORY-SAFE identify top microservice by average RPS
-###############################################################################
-from collections import defaultdict
+    def forward(self, x):
+        return self.net(x)
 
 
-def find_top_microservice_and_rt_index(rt_files):
-    log("Starting scan to find top microservice + build RT index (single pass).")
+# ============================================================
+# 2. Custom Dataset With Smart Leak-Masking
+# ============================================================
 
-    agg = {}       # msname → {sum: X, count: Y}
-    rt_index = defaultdict(list)
-    for rt_path in rt_files:
-        log(f"Scanning RT: {rt_path}")
-        for chunk in stream_csv_safe(rt_path):
-            chunk.columns = chunk.columns.str.lower().str.strip()
+class AlibabaDataset(Dataset):
+    def __init__(self, filepath):
+        print(f"Loading dataset from {filepath}...")
+        with open(filepath, "rb") as f:
+            data = pickle.load(f)
 
-            if "metric" not in chunk.columns:
-                continue
+        # unpack structure: [(obs,action), (obs,action), ...]
+        self.observations = np.array([d[0] for d in data], dtype=np.float32)
+        self.actions      = np.array([d[1] for d in data], dtype=np.int64)
+        print("✅ Dataset loaded into RAM.")
 
-            mask = chunk["metric"].str.contains("providerrpc_mcr", case=False, na=False)
-            sub = chunk.loc[mask, ["timestamp", "msname", "value"]].copy()
+    def __len__(self):
+        return len(self.actions)
 
-            # Aggregate for top microservice computation
-            g = sub.groupby("msname")["value"].agg(["sum","count"])
-            for ms, row in g.iterrows():
-                if ms not in agg:
-                    agg[ms] = {"sum":0, "count":0}
-                agg[ms]["sum"] += row["sum"]
-                agg[ms]["count"] += row["count"]
+    def __getitem__(self, idx):
+        obs = self.observations[idx]
+        action = self.actions[idx]
 
-            # Put raw values into RT index buffer
-            for t, name, v in sub.itertuples(index=False, name=None):
-                rt_index[(int(t), name)].append(v)
+        # SMART masking:
+        # Remove *replica information*, but *cap rps* instead of zeroing it.
+        obs_copy = obs.copy()
 
+        # Cap RPS at 0.4 to prevent cheating but keep useful signal
+        obs_copy[5] = min(obs_copy[5], 0.4)
 
-    # Compute average RPS and determine top microservice
-    ms_avg = {ms: data["sum"] / data["count"] for ms, data in agg.items()}
-    top_ms = max(ms_avg, key=ms_avg.get)
+        # Remove replica count features entirely (those leak the label)
+        obs_copy[9] = 0.0
+        obs_copy[10] = 0.0
+        obs_copy[11] = 0.0
 
-    # Collapse RT index to mean values
-    rt_index_final = {k: float(np.mean(vs)) for k, vs in rt_index.items()}
-
-    log(f"Top microservice = {top_ms}")
-    log(f"RT index entries = {len(rt_index_final)}")
-
-    return top_ms, rt_index_final
-
-###############################################################################
-# PASS 2: Build dataset for single microservice (defensive streaming)
-###############################################################################
-
-def build_dataset(res_files, rt_index, top_ms):
-    log(f"Building dataset for microservice: {top_ms}")
-
-    dataset_part = []
-    part_id = 0
-    total_count = 0
-
-    def save_part():
-        nonlocal dataset_part, part_id
-        if not dataset_part:
-            return
-        out_path = os.path.join(OUTPUT_DIR, f"dataset_part_{part_id}.pkl")
-        with open(out_path, "wb") as f:
-            pickle.dump(dataset_part, f)
-        log(f"Saved {len(dataset_part)} samples → {out_path}")
-        dataset_part = []
-        part_id += 1
-
-    # We'll build a small in-memory index per chunk for RT to join by timestamp+msname.
-    # Iterate over resource files and for each resource chunk, load relevant rt rows from the corresponding RT file chunks.
-    # If counts mismatch or pairing is unclear, we will load the whole RT file chunk into a dict keyed by (timestamp, msname).
-
-    for res_path in res_files:
-        # Heuristic to find RT file with similar base name; fallback to iterate all RTs (slower
-
-        log(f"Processing Resource file: {res_path}")
+        return obs_copy, action
 
 
-        if not file_quick_check(res_path):
-            log(f"Skipping unreadable resource file: {res_path}")
-            continue
+# ============================================================
+# 3. Warm Start Loader (Load old 128-128 weights safely)
+# ============================================================
 
-        try:
-            res_stream = stream_csv_safe(res_path)
-        except RuntimeError as e:
-            log(f"Failed to stream resource file {res_path}: {e}")
-            continue
-
-        # For each resource chunk, we will read through RT candidates and try to find matches.
-        for res_chunk_idx, res_chunk in enumerate(res_stream):
-            try:
-                res_chunk.columns = res_chunk.columns.str.lower().str.strip()
-            except Exception:
-                log(f"  ⚠️ Failed to sanitize resource columns for chunk {res_chunk_idx} in {res_path}. Skipping chunk.")
-                continue
-
-            # compute replica counts per (timestamp, msname)
-            try:
-                replicas = (
-                    res_chunk.groupby(['timestamp','msname'])['msinstanceid']
-                    .nunique()
-                    .reset_index()
-                    .rename(columns={'msinstanceid':'replica_count'})
-                )
-            except Exception as e:
-                log(f"  ⚠️ Replica grouping failed for chunk {res_chunk_idx} in {res_path}: {e}. Skipping chunk.")
-                continue
-
-            # find and prepare CPU/MEM columns robustly
-            # ✅ Use the *actual* Alibaba column names
-            cpu = res_chunk.get("instance_cpu_usage", pd.Series(0, index=res_chunk.index))
-            mem = res_chunk.get("instance_memory_usage", pd.Series(0, index=res_chunk.index))
-
-            state_res = (
-                pd.DataFrame({
-                    "timestamp": res_chunk["timestamp"],
-                    "msname": res_chunk["msname"],
-                    "cpu_utilization": cpu,
-                    "memory_utilization": mem
-                })
-                .groupby(["timestamp","msname"])[["cpu_utilization","memory_utilization"]]
-                .mean()
-                .reset_index()
-            )
-
-
-
-
-            # Now build RT index for this set of timestamps in this resource chunk.
-            # We'll load RT rows from candidate RT files that match timestamps in this res_chunk.
-            # ✅ Use fast O(1) lookup from prebuilt RT index
-            # ✅ Vectorized RT lookup (much faster)
-            keys = list(zip(replicas["timestamp"].astype(int), replicas["msname"]))
-            rps_vals = [rt_index.get(k, 0.0) for k in keys]
-
-            df_rps = replicas[["timestamp", "msname"]].copy()
-            df_rps["rps"] = rps_vals
-
-
-            # merge
-            try:
-                merged = replicas.merge(state_res, on=["timestamp","msname"], how="left")
-                merged = merged.merge(df_rps, on=["timestamp","msname"], how="left")
-                merged = merged.fillna(0)
-
-            except Exception as e:
-                log(f"  ⚠️ Merge failed for chunk {res_chunk_idx} in {res_path}: {e}. Skipping.")
-                continue
-
-            # filter for top_ms
-            merged = merged[merged['msname'] == top_ms]
-            if merged.empty:
-                continue
-            
-
-            # build samples
-            cpu = merged["cpu_utilization"].astype(np.float32).to_numpy()
-            mem = merged["memory_utilization"].astype(np.float32).to_numpy()
-            rps = (merged["rps"] / 500.0).astype(np.float32).to_numpy()
-            rep = merged["replica_count"].clip(1, 10).astype(np.int32).to_numpy()
-
-            obs_block = np.zeros((len(merged), 16), dtype=np.float32)
-            obs_block[:,0]  = cpu
-            obs_block[:,1]  = mem
-            obs_block[:,5]  = rps
-            obs_block[:,9]  = rep / 20.0
-            obs_block[:,10] = obs_block[:,9]
-            obs_block[:,11] = 1.0
-
-            actions = (rep - 1).tolist()
-
-            batch = list(zip(obs_block, actions))
-            dataset_part.extend(batch)
-            total_count += len(batch)
-
-            if len(dataset_part) >= PART_SIZE:
-                save_part()
-
-    # final save
-    save_part()
-    log(f"Finished building dataset. Total samples: {total_count}")
-    return total_count
-
-###############################################################################
-# PASS 3: Merge parts into final pkl
-###############################################################################
-
-def merge_parts():
-    log("Merging dataset parts...")
-    part_files = sorted(glob.glob(os.path.join(OUTPUT_DIR, "dataset_part_*.pkl")))
-    if not part_files:
-        log("No part files found; merge aborted.")
-        return
-
-    final_list = []
-    for p in part_files:
-        try:
-            with open(p, "rb") as f:
-                batch = pickle.load(f)
-            final_list.extend(batch)
-            log(f"Loaded {p} ({len(batch)} samples). Accum total: {len(final_list)}")
-        except Exception as e:
-            log(f"Failed to load part {p}: {e}")
-
-    with open(FINAL_DATASET, "wb") as f:
-        pickle.dump(final_list, f)
-    log(f"Final dataset saved: {FINAL_DATASET} (Total samples: {len(final_list)})")
-
-    # cleanup
-    for p in part_files:
-        try:
-            os.remove(p)
-        except Exception:
-            pass
+def warm_start_load(new_model, old_checkpoint_path):
     try:
-        os.rmdir(OUTPUT_DIR)
-    except Exception:
-        pass
-    log("Cleanup complete.")
+        old_state = torch.load(old_checkpoint_path, map_location="cpu")
 
-###############################################################################
-# MAIN
-###############################################################################
+        new_state = new_model.state_dict()
+        matched = 0
+        skipped = 0
 
-def main():
-    start = time.time()
-    res_files = sorted(glob.glob(RESOURCE_DIR))
-    rt_files  = sorted(glob.glob(RT_DIR))
+        for k in new_state.keys():
+            if k in old_state and old_state[k].shape == new_state[k].shape:
+                new_state[k] = old_state[k]
+                matched += 1
+            else:
+                skipped += 1
 
-    if not res_files:
-        log(f"ERROR: No resource files found with pattern: {RESOURCE_DIR}")
-        sys.exit(1)
-    if not rt_files:
-        log(f"ERROR: No RT files found with pattern: {RT_DIR}")
-        sys.exit(1)
+        new_model.load_state_dict(new_state)
+        print(f"✅ Warm-start loaded. Matched: {matched} layers | Skipped: {skipped} layers")
+    except Exception as e:
+        print(f"⚠️ Warm-start failed: {e}")
 
-    log(f"Found {len(res_files)} resource files and {len(rt_files)} RT files.")
 
-    # Sanity quick-print of first few file names
-    log("Resource files (first 5): " + ", ".join(os.path.basename(p) for p in res_files[:5]))
-    log("RT files (first 5): " + ", ".join(os.path.basename(p) for p in rt_files[:5]))
+# ============================================================
+# 4. Weighted Loss Helper
+# ============================================================
 
-    top_ms, rt_index = find_top_microservice_and_rt_index(rt_files)
-    if not top_ms:
-        log("Top microservice detection failed. Exiting.")
-        sys.exit(1)
+def compute_class_weights(dataset, num_classes=10):
+    counts = np.zeros(num_classes, dtype=np.int64)
+    for a in dataset.actions:
+        counts[a] += 1
+    weights = 1.0 / np.maximum(counts, 1)
+    weights = weights / weights.sum()
+    return torch.tensor(weights, dtype=torch.float32)
 
-    build_dataset(res_files, rt_index, top_ms)
-    merge_parts()
 
-    end = time.time()
-    log(f"ALL DONE in {end - start:.1f} seconds.")
+# ============================================================
+# 5. MAIN TRAINING SCRIPT
+# ============================================================
 
 if __name__ == "__main__":
-    main()
+
+    # -----------------------------
+    # CONFIG
+    # -----------------------------
+    DATASET_PATH   = "alibaba_dataset_large.pkl"
+    CHECKPOINT_OLD = "alibaba_clone_agent_v2.pth"   # warm start
+    CHECKPOINT_NEW = "alibaba_clone_agent_v3.pth"
+
+    OBS_DIM    = 16
+    ACTION_DIM = 10
+
+    BATCH_SIZE = 2048
+    EPOCHS     = 120        # longer training
+    LR         = 1e-4
+    VALIDATION_SPLIT = 0.1
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
+    # -----------------------------
+    # Load Dataset
+    # -----------------------------
+    dataset = AlibabaDataset(DATASET_PATH)
+    class_weights = compute_class_weights(dataset).to(device)
+
+    val_size   = int(len(dataset) * VALIDATION_SPLIT)
+    train_size = len(dataset) - val_size
+    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+
+    print(f"Total samples: {len(dataset)}")
+    print(f"Training samples: {len(train_dataset)}")
+    print(f"Validation samples: {len(val_dataset)}")
+
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
+    val_loader   = DataLoader(val_dataset,   batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
+
+    # -----------------------------
+    # Build Model
+    # -----------------------------
+    model = QNetwork(OBS_DIM, ACTION_DIM).to(device)
+
+    # Warm start
+    warm_start_load(model, CHECKPOINT_OLD)
+
+    # Loss & Optimizer
+    criterion  = nn.CrossEntropyLoss(weight=class_weights)
+    optimizer  = optim.Adam(model.parameters(), lr=LR)
+    scheduler  = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+
+    # Mixed precision
+    scaler = torch.cuda.amp.GradScaler()
+
+    # -----------------------------
+    # TRAINING LOOP
+    # -----------------------------
+    print("🔥 Starting upgraded training...")
+
+    best_val_accuracy = 0.0
+
+    for epoch in range(1, EPOCHS + 1):
+        model.train()
+        total_train_loss = 0
+
+        for batch_obs, batch_actions in train_loader:
+            batch_obs = batch_obs.to(device)
+            batch_actions = batch_actions.to(device)
+
+            optimizer.zero_grad()
+
+            # ---- MIXED PRECISION ----
+            with torch.cuda.amp.autocast():
+                logits = model(batch_obs)
+                loss   = criterion(logits, batch_actions)
+
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+
+            total_train_loss += loss.item()
+
+        avg_train_loss = total_train_loss / len(train_loader)
+
+        # -----------------------------
+        # VALIDATION
+        # -----------------------------
+        model.eval()
+        total_val_loss = 0
+        correct = 0
+        total   = 0
+
+        with torch.no_grad():
+            for batch_obs, batch_actions in val_loader:
+                batch_obs = batch_obs.to(device)
+                batch_actions = batch_actions.to(device)
+
+                with torch.cuda.amp.autocast():
+                    logits = model(batch_obs)
+                    loss   = criterion(logits, batch_actions)
+
+                total_val_loss += loss.item()
+
+                _, predicted = torch.max(logits.data, 1)
+                total   += batch_actions.size(0)
+                correct += (predicted == batch_actions).sum().item()
+
+        avg_val_loss = total_val_loss / len(val_loader)
+        val_accuracy = 100 * correct / total
+
+        scheduler.step()
+
+        print(f"Epoch {epoch}/{EPOCHS} --- "
+              f"Train Loss: {avg_train_loss:.5f} | "
+              f"Val Loss: {avg_val_loss:.5f} | "
+              f"Val Acc: {val_accuracy:.2f}%")
+
+        # Save best model
+        if val_accuracy > best_val_accuracy:
+            best_val_accuracy = val_accuracy
+            torch.save(model.state_dict(), CHECKPOINT_NEW)
+            print(f"  ✅ New best model saved! Acc = {val_accuracy:.2f}%")
+
+        # GPU cooldown every 30 epochs
+        if epoch % 30 == 0:
+            print("🧊 Cooling GPU for 20 seconds...")
+            time.sleep(20)
+
+    print("\n✅ Training complete!")
+    print(f"Best validation accuracy: {best_val_accuracy:.2f}%")
+    print(f"Saved model: {CHECKPOINT_NEW}")
