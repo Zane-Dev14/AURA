@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from boutique_env import K8sAutoscaleEnv
 
 
