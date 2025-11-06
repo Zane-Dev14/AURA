@@ -48,9 +48,9 @@ load_pattern:
   amplitude: 80            # Sine wave amplitude
   period_s: 600            # 10 minute cycle
 
-# Reward function weights
+
 reward:
-  cost_weight: 1.0         # Alpha: cost penalty
-  sla_weight: 10.0         # Beta: SLA violation penalty (tune this!)
-  flapping_weight: 0.5     # Gamma: scaling change penalty
-  sla_threshold_ms: 200    # P95 latency target
+  cost_weight: 1.0
+  sla_weight: 5.0          # less harsh on SLA spikes
+  flapping_weight: 1.0     # penalize scaling changes more
+  sla_threshold_ms: 200
