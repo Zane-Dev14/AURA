@@ -1,0 +1,938 @@
+
+======================================================================
+SINGLE EPISODE MODE
+======================================================================
+
+======================================================================
+BASELINE: RANDOM ACTIONS
+======================================================================
+
+Step 001: Reward=-19.660  SLA=0  Cost=0.6600
+Step 002: Reward=-256.305  SLA=1  Cost=0.3300
+Step 003: Reward=-10.630  SLA=0  Cost=0.6300
+Step 004: Reward=-11.300  SLA=0  Cost=0.3000
+Step 005: Reward=-9.390  SLA=0  Cost=0.3900
+Step 006: Reward=-9.660  SLA=0  Cost=0.6600
+Step 007: Reward=-3.630  SLA=0  Cost=0.6300
+Step 008: Reward=-8.390  SLA=0  Cost=0.3900
+Step 009: Reward=-7.480  SLA=0  Cost=0.4800
+Step 010: Reward=-258.365  SLA=1  Cost=0.3900
+--- Metrics snapshot ---
+  api: p95=9999ms ready=1/1 queue=500.0
+  app: p95=19ms ready=8/8 queue=0.0
+  db: p95=16ms ready=4/4 queue=0.0
+
+Step 011: Reward=-14.810  SLA=0  Cost=0.8100
+Step 012: Reward=-8.570  SLA=0  Cost=0.5700
+Step 013: Reward=-15.480  SLA=0  Cost=0.4800
+Step 014: Reward=-5.330  SLA=0  Cost=0.3300
+Step 015: Reward=-7.360  SLA=0  Cost=0.3600
+Step 016: Reward=-12.720  SLA=0  Cost=0.7200
+Step 017: Reward=-9.450  SLA=0  Cost=0.4500
+Step 018: Reward=-4.570  SLA=0  Cost=0.5700
+Step 019: Reward=-261.365  SLA=1  Cost=0.3900
+Step 020: Reward=-13.480  SLA=0  Cost=0.4800
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=6/6 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 021: Reward=-9.630  SLA=0  Cost=0.6300
+Step 022: Reward=-260.335  SLA=1  Cost=0.3600
+Step 023: Reward=-6.540  SLA=0  Cost=0.5400
+Step 024: Reward=-7.690  SLA=0  Cost=0.6900
+Step 025: Reward=-7.480  SLA=0  Cost=0.4800
+Step 026: Reward=-4.540  SLA=0  Cost=0.5400
+Step 027: Reward=-9.510  SLA=0  Cost=0.5100
+Step 028: Reward=-9.660  SLA=0  Cost=0.6600
+Step 029: Reward=-13.450  SLA=0  Cost=0.4500
+Step 030: Reward=-3.420  SLA=0  Cost=0.4200
+--- Metrics snapshot ---
+  api: p95=26ms ready=3/3 queue=0.0
+  app: p95=19ms ready=7/7 queue=0.0
+  db: p95=16ms ready=4/4 queue=0.0
+
+Step 031: Reward=-11.690  SLA=0  Cost=0.6900
+Step 032: Reward=-6.570  SLA=0  Cost=0.5700
+Step 033: Reward=-12.390  SLA=0  Cost=0.3900
+Step 034: Reward=-6.390  SLA=0  Cost=0.3900
+Step 035: Reward=-13.420  SLA=0  Cost=0.4200
+Step 036: Reward=-13.390  SLA=0  Cost=0.3900
+Step 037: Reward=-8.570  SLA=0  Cost=0.5700
+Step 038: Reward=-15.360  SLA=0  Cost=0.3600
+Step 039: Reward=-14.780  SLA=0  Cost=0.7800
+Step 040: Reward=-265.155  SLA=1  Cost=0.1800
+--- Metrics snapshot ---
+  api: p95=9999ms ready=1/1 queue=500.0
+  app: p95=19ms ready=3/3 queue=0.0
+  db: p95=16ms ready=2/2 queue=0.0
+
+Step 041: Reward=-262.545  SLA=1  Cost=0.5700
+Step 042: Reward=-12.450  SLA=0  Cost=0.4500
+Step 043: Reward=-7.420  SLA=0  Cost=0.4200
+Step 044: Reward=-7.570  SLA=0  Cost=0.5700
+Step 045: Reward=-11.420  SLA=0  Cost=0.4200
+Step 046: Reward=-13.810  SLA=0  Cost=0.8100
+Step 047: Reward=-9.600  SLA=0  Cost=0.6000
+Step 048: Reward=-7.570  SLA=0  Cost=0.5700
+Step 049: Reward=-7.780  SLA=0  Cost=0.7800
+Step 050: Reward=-8.660  SLA=0  Cost=0.6600
+--- Metrics snapshot ---
+  api: p95=26ms ready=10/10 queue=0.0
+  app: p95=19ms ready=8/8 queue=0.0
+  db: p95=16ms ready=4/4 queue=0.0
+
+Step 051: Reward=-7.690  SLA=0  Cost=0.6900
+Step 052: Reward=-5.660  SLA=0  Cost=0.6600
+Step 053: Reward=-9.390  SLA=0  Cost=0.3900
+Step 054: Reward=-11.360  SLA=0  Cost=0.3600
+Step 055: Reward=-9.510  SLA=0  Cost=0.5100
+Step 056: Reward=-8.510  SLA=0  Cost=0.5100
+Step 057: Reward=-5.480  SLA=0  Cost=0.4800
+Step 058: Reward=-7.510  SLA=0  Cost=0.5100
+Step 059: Reward=-11.300  SLA=0  Cost=0.3000
+Step 060: Reward=-5.450  SLA=0  Cost=0.4500
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=1/1 queue=0.0
+  db: p95=16ms ready=5/5 queue=0.0
+
+Step 061: Reward=-266.575  SLA=1  Cost=0.6000
+Step 062: Reward=-15.390  SLA=0  Cost=0.3900
+Step 063: Reward=-10.690  SLA=0  Cost=0.6900
+Step 064: Reward=-7.540  SLA=0  Cost=0.5400
+Step 065: Reward=-11.630  SLA=0  Cost=0.6300
+Step 066: Reward=-18.390  SLA=0  Cost=0.3900
+Step 067: Reward=-14.570  SLA=0  Cost=0.5700
+Step 068: Reward=-6.390  SLA=0  Cost=0.3900
+Step 069: Reward=-4.450  SLA=0  Cost=0.4500
+Step 070: Reward=-11.780  SLA=0  Cost=0.7800
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=7/7 queue=0.0
+  db: p95=16ms ready=10/10 queue=0.0
+
+Step 071: Reward=-6.600  SLA=0  Cost=0.6000
+Step 072: Reward=-10.480  SLA=0  Cost=0.4800
+Step 073: Reward=-10.600  SLA=0  Cost=0.6000
+Step 074: Reward=-5.450  SLA=0  Cost=0.4500
+Step 075: Reward=-10.450  SLA=0  Cost=0.4500
+Step 076: Reward=-11.780  SLA=0  Cost=0.7800
+Step 077: Reward=-14.420  SLA=0  Cost=0.4200
+Step 078: Reward=-3.510  SLA=0  Cost=0.5100
+Step 079: Reward=-15.360  SLA=0  Cost=0.3600
+Step 080: Reward=-16.600  SLA=0  Cost=0.6000
+--- Metrics snapshot ---
+  api: p95=26ms ready=3/3 queue=0.0
+  app: p95=19ms ready=7/7 queue=0.0
+  db: p95=16ms ready=10/10 queue=0.0
+
+Step 081: Reward=-254.305  SLA=1  Cost=0.3300
+Step 082: Reward=-13.420  SLA=0  Cost=0.4200
+Step 083: Reward=-255.275  SLA=1  Cost=0.3000
+Step 084: Reward=-3.390  SLA=0  Cost=0.3900
+Step 085: Reward=-9.600  SLA=0  Cost=0.6000
+Step 086: Reward=-10.300  SLA=0  Cost=0.3000
+Step 087: Reward=-12.660  SLA=0  Cost=0.6600
+Step 088: Reward=-4.660  SLA=0  Cost=0.6600
+Step 089: Reward=-13.270  SLA=0  Cost=0.2700
+Step 090: Reward=-254.275  SLA=1  Cost=0.3000
+--- Metrics snapshot ---
+  api: p95=9999ms ready=1/1 queue=500.0
+  app: p95=19ms ready=7/7 queue=0.0
+  db: p95=16ms ready=2/2 queue=0.0
+
+Step 091: Reward=-14.720  SLA=0  Cost=0.7200
+Step 092: Reward=-260.425  SLA=1  Cost=0.4500
+Step 093: Reward=-14.510  SLA=0  Cost=0.5100
+Step 094: Reward=-8.750  SLA=0  Cost=0.7500
+Step 095: Reward=-6.570  SLA=0  Cost=0.5700
+Step 096: Reward=-11.240  SLA=0  Cost=0.2400
+Step 097: Reward=-15.690  SLA=0  Cost=0.6900
+Step 098: Reward=-9.480  SLA=0  Cost=0.4800
+Step 099: Reward=-9.570  SLA=0  Cost=0.5700
+Step 100: Reward=-9.540  SLA=0  Cost=0.5400
+--- Metrics snapshot ---
+  api: p95=26ms ready=10/10 queue=0.0
+  app: p95=19ms ready=6/6 queue=0.0
+  db: p95=16ms ready=2/2 queue=0.0
+
+Step 101: Reward=-12.420  SLA=0  Cost=0.4200
+Step 102: Reward=-252.305  SLA=1  Cost=0.3300
+Step 103: Reward=-12.330  SLA=0  Cost=0.3300
+Step 104: Reward=-13.540  SLA=0  Cost=0.5400
+Step 105: Reward=-3.630  SLA=0  Cost=0.6300
+Step 106: Reward=-8.750  SLA=0  Cost=0.7500
+Step 107: Reward=-11.420  SLA=0  Cost=0.4200
+Step 108: Reward=-246.365  SLA=1  Cost=0.3900
+Step 109: Reward=-13.600  SLA=0  Cost=0.6000
+Step 110: Reward=-11.390  SLA=0  Cost=0.3900
+--- Metrics snapshot ---
+  api: p95=26ms ready=8/8 queue=0.0
+  app: p95=19ms ready=3/3 queue=0.0
+  db: p95=16ms ready=2/2 queue=0.0
+
+Step 111: Reward=-7.600  SLA=0  Cost=0.6000
+Step 112: Reward=-10.300  SLA=0  Cost=0.3000
+Step 113: Reward=-9.510  SLA=0  Cost=0.5100
+Step 114: Reward=-15.480  SLA=0  Cost=0.4800
+Step 115: Reward=-4.360  SLA=0  Cost=0.3600
+Step 116: Reward=-11.450  SLA=0  Cost=0.4500
+Step 117: Reward=-13.420  SLA=0  Cost=0.4200
+Step 118: Reward=-15.510  SLA=0  Cost=0.5100
+Step 119: Reward=-3.600  SLA=0  Cost=0.6000
+Step 120: Reward=-13.570  SLA=0  Cost=0.5700
+--- Metrics snapshot ---
+  api: p95=26ms ready=7/7 queue=0.0
+  app: p95=19ms ready=3/3 queue=0.0
+  db: p95=16ms ready=9/9 queue=0.0
+
+Step 121: Reward=-11.480  SLA=0  Cost=0.4800
+Step 122: Reward=-8.300  SLA=0  Cost=0.3000
+Step 123: Reward=-5.450  SLA=0  Cost=0.4500
+Step 124: Reward=-5.600  SLA=0  Cost=0.6000
+Step 125: Reward=-7.750  SLA=0  Cost=0.7500
+Step 126: Reward=-3.720  SLA=0  Cost=0.7200
+Step 127: Reward=-14.300  SLA=0  Cost=0.3000
+Step 128: Reward=-9.570  SLA=0  Cost=0.5700
+Step 129: Reward=-7.480  SLA=0  Cost=0.4800
+Step 130: Reward=-5.630  SLA=0  Cost=0.6300
+--- Metrics snapshot ---
+  api: p95=26ms ready=10/10 queue=0.0
+  app: p95=19ms ready=3/3 queue=0.0
+  db: p95=16ms ready=8/8 queue=0.0
+
+Step 131: Reward=-3.540  SLA=0  Cost=0.5400
+Step 132: Reward=-6.600  SLA=0  Cost=0.6000
+Step 133: Reward=-8.660  SLA=0  Cost=0.6600
+Step 134: Reward=-7.450  SLA=0  Cost=0.4500
+Step 135: Reward=-12.750  SLA=0  Cost=0.7500
+Step 136: Reward=-5.600  SLA=0  Cost=0.6000
+Step 137: Reward=-4.600  SLA=0  Cost=0.6000
+Step 138: Reward=-16.540  SLA=0  Cost=0.5400
+Step 139: Reward=-9.330  SLA=0  Cost=0.3300
+Step 140: Reward=-11.660  SLA=0  Cost=0.6600
+--- Metrics snapshot ---
+  api: p95=26ms ready=5/5 queue=0.0
+  app: p95=19ms ready=9/9 queue=0.0
+  db: p95=16ms ready=8/8 queue=0.0
+
+Step 141: Reward=-256.305  SLA=1  Cost=0.3300
+Step 142: Reward=-6.270  SLA=0  Cost=0.2700
+Step 143: Reward=-11.420  SLA=0  Cost=0.4200
+Step 144: Reward=-7.630  SLA=0  Cost=0.6300
+Step 145: Reward=-13.360  SLA=0  Cost=0.3600
+Step 146: Reward=-10.600  SLA=0  Cost=0.6000
+Step 147: Reward=-9.630  SLA=0  Cost=0.6300
+Step 148: Reward=-5.480  SLA=0  Cost=0.4800
+Step 149: Reward=-8.660  SLA=0  Cost=0.6600
+Step 150: Reward=-7.450  SLA=0  Cost=0.4500
+--- Metrics snapshot ---
+  api: p95=26ms ready=3/3 queue=0.0
+  app: p95=19ms ready=8/8 queue=0.0
+  db: p95=16ms ready=4/4 queue=0.0
+
+Step 151: Reward=-6.510  SLA=0  Cost=0.5100
+Step 152: Reward=-10.210  SLA=0  Cost=0.2100
+Step 153: Reward=-6.390  SLA=0  Cost=0.3900
+Step 154: Reward=-7.600  SLA=0  Cost=0.6000
+Step 155: Reward=-7.690  SLA=0  Cost=0.6900
+Step 156: Reward=-15.240  SLA=0  Cost=0.2400
+Step 157: Reward=-12.480  SLA=0  Cost=0.4800
+Step 158: Reward=-13.630  SLA=0  Cost=0.6300
+Step 159: Reward=-7.780  SLA=0  Cost=0.7800
+Step 160: Reward=-264.185  SLA=1  Cost=0.2100
+--- Metrics snapshot ---
+  api: p95=9999ms ready=1/1 queue=500.0
+  app: p95=19ms ready=5/5 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 161: Reward=-9.480  SLA=0  Cost=0.4800
+Step 162: Reward=-260.245  SLA=1  Cost=0.2700
+Step 163: Reward=-15.720  SLA=0  Cost=0.7200
+Step 164: Reward=-11.390  SLA=0  Cost=0.3900
+Step 165: Reward=-253.365  SLA=1  Cost=0.3900
+Step 166: Reward=-254.335  SLA=1  Cost=0.3600
+Step 167: Reward=-7.510  SLA=0  Cost=0.5100
+Step 168: Reward=-12.510  SLA=0  Cost=0.5100
+Step 169: Reward=-259.425  SLA=1  Cost=0.4500
+Step 170: Reward=-5.360  SLA=0  Cost=0.3600
+--- Metrics snapshot ---
+  api: p95=26ms ready=6/6 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=4/4 queue=0.0
+
+Step 171: Reward=-4.420  SLA=0  Cost=0.4200
+Step 172: Reward=-5.510  SLA=0  Cost=0.5100
+Step 173: Reward=-11.840  SLA=0  Cost=0.8400
+Step 174: Reward=-6.660  SLA=0  Cost=0.6600
+Step 175: Reward=-18.540  SLA=0  Cost=0.5400
+Step 176: Reward=-3.510  SLA=0  Cost=0.5100
+Step 177: Reward=-13.660  SLA=0  Cost=0.6600
+Step 178: Reward=-13.510  SLA=0  Cost=0.5100
+Step 179: Reward=-7.420  SLA=0  Cost=0.4200
+Step 180: Reward=-6.360  SLA=0  Cost=0.3600
+--- Metrics snapshot ---
+  api: p95=26ms ready=6/6 queue=0.0
+  app: p95=19ms ready=3/3 queue=0.0
+  db: p95=16ms ready=3/3 queue=0.0
+
+Step 181: Reward=-10.480  SLA=0  Cost=0.4800
+Step 182: Reward=-12.600  SLA=0  Cost=0.6000
+Step 183: Reward=-12.660  SLA=0  Cost=0.6600
+Step 184: Reward=-9.570  SLA=0  Cost=0.5700
+Step 185: Reward=-260.575  SLA=1  Cost=0.6000
+Step 186: Reward=-15.690  SLA=0  Cost=0.6900
+Step 187: Reward=-16.330  SLA=0  Cost=0.3300
+Step 188: Reward=-10.390  SLA=0  Cost=0.3900
+Step 189: Reward=-10.630  SLA=0  Cost=0.6300
+Step 190: Reward=-15.540  SLA=0  Cost=0.5400
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=9/9 queue=0.0
+  db: p95=16ms ready=7/7 queue=0.0
+
+Step 191: Reward=-9.510  SLA=0  Cost=0.5100
+Step 192: Reward=-3.600  SLA=0  Cost=0.6000
+Step 193: Reward=-9.510  SLA=0  Cost=0.5100
+Step 194: Reward=-10.390  SLA=0  Cost=0.3900
+Step 195: Reward=-11.660  SLA=0  Cost=0.6600
+Step 196: Reward=-9.510  SLA=0  Cost=0.5100
+Step 197: Reward=-10.750  SLA=0  Cost=0.7500
+Step 198: Reward=-10.450  SLA=0  Cost=0.4500
+Step 199: Reward=-8.390  SLA=0  Cost=0.3900
+Step 200: Reward=-9.360  SLA=0  Cost=0.3600
+--- Metrics snapshot ---
+  api: p95=26ms ready=8/8 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=2/2 queue=0.0
+
+
+📊 Episode Summary:
+   Total Reward: -6936.35
+   Total Cost: $101.8500
+   SLA Violations: 20
+   Avg P95 Latency: 352.6ms
+
+======================================================================
+HPA (K8s Horizontal Pod Autoscaler)
+======================================================================
+
+Step 001: Reward=-490.040  SLA=2  Cost=0.0900
+Step 002: Reward=-3.180  SLA=0  Cost=0.1800
+Step 003: Reward=-1.150  SLA=0  Cost=0.1500
+Step 004: Reward=-0.150  SLA=0  Cost=0.1500
+Step 005: Reward=-0.150  SLA=0  Cost=0.1500
+Step 006: Reward=-0.150  SLA=0  Cost=0.1500
+Step 007: Reward=-0.150  SLA=0  Cost=0.1500
+Step 008: Reward=-0.150  SLA=0  Cost=0.1500
+Step 009: Reward=-0.150  SLA=0  Cost=0.1500
+Step 010: Reward=-0.150  SLA=0  Cost=0.1500
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 011: Reward=-1.120  SLA=0  Cost=0.1200
+Step 012: Reward=-1.150  SLA=0  Cost=0.1500
+Step 013: Reward=-1.120  SLA=0  Cost=0.1200
+Step 014: Reward=-1.090  SLA=0  Cost=0.0900
+Step 015: Reward=-1.120  SLA=0  Cost=0.1200
+Step 016: Reward=-1.090  SLA=0  Cost=0.0900
+Step 017: Reward=-1.120  SLA=0  Cost=0.1200
+Step 018: Reward=-107.827  SLA=1  Cost=0.0900
+Step 019: Reward=-1.120  SLA=0  Cost=0.1200
+Step 020: Reward=-1.150  SLA=0  Cost=0.1500
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 021: Reward=-246.095  SLA=1  Cost=0.1200
+Step 022: Reward=-1.150  SLA=0  Cost=0.1500
+Step 023: Reward=-0.150  SLA=0  Cost=0.1500
+Step 024: Reward=-0.150  SLA=0  Cost=0.1500
+Step 025: Reward=-0.150  SLA=0  Cost=0.1500
+Step 026: Reward=-0.150  SLA=0  Cost=0.1500
+Step 027: Reward=-0.150  SLA=0  Cost=0.1500
+Step 028: Reward=-0.150  SLA=0  Cost=0.1500
+Step 029: Reward=-0.150  SLA=0  Cost=0.1500
+Step 030: Reward=-0.150  SLA=0  Cost=0.1500
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 031: Reward=-1.120  SLA=0  Cost=0.1200
+Step 032: Reward=-1.150  SLA=0  Cost=0.1500
+Step 033: Reward=-2.090  SLA=0  Cost=0.0900
+Step 034: Reward=-1.120  SLA=0  Cost=0.1200
+Step 035: Reward=-1.090  SLA=0  Cost=0.0900
+Step 036: Reward=-1.120  SLA=0  Cost=0.1200
+Step 037: Reward=-1.090  SLA=0  Cost=0.0900
+Step 038: Reward=-1.120  SLA=0  Cost=0.1200
+Step 039: Reward=-246.065  SLA=1  Cost=0.0900
+Step 040: Reward=-2.150  SLA=0  Cost=0.1500
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 041: Reward=-246.095  SLA=1  Cost=0.1200
+Step 042: Reward=-1.150  SLA=0  Cost=0.1500
+Step 043: Reward=-0.150  SLA=0  Cost=0.1500
+Step 044: Reward=-0.150  SLA=0  Cost=0.1500
+Step 045: Reward=-0.150  SLA=0  Cost=0.1500
+Step 046: Reward=-0.150  SLA=0  Cost=0.1500
+Step 047: Reward=-0.150  SLA=0  Cost=0.1500
+Step 048: Reward=-0.150  SLA=0  Cost=0.1500
+Step 049: Reward=-0.150  SLA=0  Cost=0.1500
+Step 050: Reward=-0.150  SLA=0  Cost=0.1500
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 051: Reward=-1.120  SLA=0  Cost=0.1200
+Step 052: Reward=-1.150  SLA=0  Cost=0.1500
+Step 053: Reward=-1.120  SLA=0  Cost=0.1200
+Step 054: Reward=-1.090  SLA=0  Cost=0.0900
+Step 055: Reward=-1.120  SLA=0  Cost=0.1200
+Step 056: Reward=-1.090  SLA=0  Cost=0.0900
+Step 057: Reward=-1.120  SLA=0  Cost=0.1200
+Step 058: Reward=-246.065  SLA=1  Cost=0.0900
+Step 059: Reward=-2.150  SLA=0  Cost=0.1500
+Step 060: Reward=-1.120  SLA=0  Cost=0.1200
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=1/1 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 061: Reward=-1.150  SLA=0  Cost=0.1500
+Step 062: Reward=-0.150  SLA=0  Cost=0.1500
+Step 063: Reward=-0.150  SLA=0  Cost=0.1500
+Step 064: Reward=-0.150  SLA=0  Cost=0.1500
+Step 065: Reward=-0.150  SLA=0  Cost=0.1500
+Step 066: Reward=-0.150  SLA=0  Cost=0.1500
+Step 067: Reward=-0.150  SLA=0  Cost=0.1500
+Step 068: Reward=-0.150  SLA=0  Cost=0.1500
+Step 069: Reward=-0.150  SLA=0  Cost=0.1500
+Step 070: Reward=-0.150  SLA=0  Cost=0.1500
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 071: Reward=-1.120  SLA=0  Cost=0.1200
+Step 072: Reward=-1.150  SLA=0  Cost=0.1500
+Step 073: Reward=-1.120  SLA=0  Cost=0.1200
+Step 074: Reward=-1.090  SLA=0  Cost=0.0900
+Step 075: Reward=-1.120  SLA=0  Cost=0.1200
+Step 076: Reward=-1.090  SLA=0  Cost=0.0900
+Step 077: Reward=-1.120  SLA=0  Cost=0.1200
+Step 078: Reward=-1.090  SLA=0  Cost=0.0900
+Step 079: Reward=-1.120  SLA=0  Cost=0.1200
+Step 080: Reward=-1.150  SLA=0  Cost=0.1500
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 081: Reward=-246.095  SLA=1  Cost=0.1200
+Step 082: Reward=-1.150  SLA=0  Cost=0.1500
+Step 083: Reward=-0.150  SLA=0  Cost=0.1500
+Step 084: Reward=-0.150  SLA=0  Cost=0.1500
+Step 085: Reward=-0.150  SLA=0  Cost=0.1500
+Step 086: Reward=-0.150  SLA=0  Cost=0.1500
+Step 087: Reward=-0.150  SLA=0  Cost=0.1500
+Step 088: Reward=-0.150  SLA=0  Cost=0.1500
+Step 089: Reward=-0.150  SLA=0  Cost=0.1500
+Step 090: Reward=-0.150  SLA=0  Cost=0.1500
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 091: Reward=-1.120  SLA=0  Cost=0.1200
+Step 092: Reward=-1.150  SLA=0  Cost=0.1500
+Step 093: Reward=-1.120  SLA=0  Cost=0.1200
+Step 094: Reward=-1.090  SLA=0  Cost=0.0900
+Step 095: Reward=-1.120  SLA=0  Cost=0.1200
+Step 096: Reward=-1.090  SLA=0  Cost=0.0900
+Step 097: Reward=-1.120  SLA=0  Cost=0.1200
+Step 098: Reward=-1.090  SLA=0  Cost=0.0900
+Step 099: Reward=-1.120  SLA=0  Cost=0.1200
+Step 100: Reward=-1.150  SLA=0  Cost=0.1500
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 101: Reward=-17.048  SLA=1  Cost=0.1200
+Step 102: Reward=-1.150  SLA=0  Cost=0.1500
+Step 103: Reward=-0.150  SLA=0  Cost=0.1500
+Step 104: Reward=-0.150  SLA=0  Cost=0.1500
+Step 105: Reward=-0.150  SLA=0  Cost=0.1500
+Step 106: Reward=-0.150  SLA=0  Cost=0.1500
+Step 107: Reward=-0.150  SLA=0  Cost=0.1500
+Step 108: Reward=-0.150  SLA=0  Cost=0.1500
+Step 109: Reward=-0.150  SLA=0  Cost=0.1500
+Step 110: Reward=-0.150  SLA=0  Cost=0.1500
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 111: Reward=-1.120  SLA=0  Cost=0.1200
+Step 112: Reward=-1.150  SLA=0  Cost=0.1500
+Step 113: Reward=-2.090  SLA=0  Cost=0.0900
+Step 114: Reward=-1.120  SLA=0  Cost=0.1200
+Step 115: Reward=-1.090  SLA=0  Cost=0.0900
+Step 116: Reward=-1.120  SLA=0  Cost=0.1200
+Step 117: Reward=-1.090  SLA=0  Cost=0.0900
+Step 118: Reward=-1.120  SLA=0  Cost=0.1200
+Step 119: Reward=-1.150  SLA=0  Cost=0.1500
+Step 120: Reward=-1.120  SLA=0  Cost=0.1200
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=1/1 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 121: Reward=-1.150  SLA=0  Cost=0.1500
+Step 122: Reward=-0.150  SLA=0  Cost=0.1500
+Step 123: Reward=-0.150  SLA=0  Cost=0.1500
+Step 124: Reward=-0.150  SLA=0  Cost=0.1500
+Step 125: Reward=-0.150  SLA=0  Cost=0.1500
+Step 126: Reward=-0.150  SLA=0  Cost=0.1500
+Step 127: Reward=-0.150  SLA=0  Cost=0.1500
+Step 128: Reward=-0.150  SLA=0  Cost=0.1500
+Step 129: Reward=-0.150  SLA=0  Cost=0.1500
+Step 130: Reward=-6.866  SLA=1  Cost=0.1200
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=430ms ready=1/1 queue=20.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 131: Reward=-1.150  SLA=0  Cost=0.1500
+Step 132: Reward=-1.120  SLA=0  Cost=0.1200
+Step 133: Reward=-1.090  SLA=0  Cost=0.0900
+Step 134: Reward=-1.120  SLA=0  Cost=0.1200
+Step 135: Reward=-1.090  SLA=0  Cost=0.0900
+Step 136: Reward=-1.120  SLA=0  Cost=0.1200
+Step 137: Reward=-1.090  SLA=0  Cost=0.0900
+Step 138: Reward=-1.120  SLA=0  Cost=0.1200
+Step 139: Reward=-246.065  SLA=1  Cost=0.0900
+Step 140: Reward=-2.150  SLA=0  Cost=0.1500
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 141: Reward=-246.095  SLA=1  Cost=0.1200
+Step 142: Reward=-1.150  SLA=0  Cost=0.1500
+Step 143: Reward=-0.150  SLA=0  Cost=0.1500
+Step 144: Reward=-0.150  SLA=0  Cost=0.1500
+Step 145: Reward=-0.150  SLA=0  Cost=0.1500
+Step 146: Reward=-0.150  SLA=0  Cost=0.1500
+Step 147: Reward=-0.150  SLA=0  Cost=0.1500
+Step 148: Reward=-0.150  SLA=0  Cost=0.1500
+Step 149: Reward=-0.150  SLA=0  Cost=0.1500
+Step 150: Reward=-246.095  SLA=1  Cost=0.1200
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=9999ms ready=1/1 queue=17.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 151: Reward=-1.150  SLA=0  Cost=0.1500
+Step 152: Reward=-1.120  SLA=0  Cost=0.1200
+Step 153: Reward=-1.150  SLA=0  Cost=0.1500
+Step 154: Reward=-2.090  SLA=0  Cost=0.0900
+Step 155: Reward=-1.120  SLA=0  Cost=0.1200
+Step 156: Reward=-1.090  SLA=0  Cost=0.0900
+Step 157: Reward=-1.120  SLA=0  Cost=0.1200
+Step 158: Reward=-246.065  SLA=1  Cost=0.0900
+Step 159: Reward=-2.150  SLA=0  Cost=0.1500
+Step 160: Reward=-1.120  SLA=0  Cost=0.1200
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=1/1 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 161: Reward=-1.150  SLA=0  Cost=0.1500
+Step 162: Reward=-246.095  SLA=1  Cost=0.1200
+Step 163: Reward=-1.150  SLA=0  Cost=0.1500
+Step 164: Reward=-0.150  SLA=0  Cost=0.1500
+Step 165: Reward=-0.150  SLA=0  Cost=0.1500
+Step 166: Reward=-0.150  SLA=0  Cost=0.1500
+Step 167: Reward=-0.150  SLA=0  Cost=0.1500
+Step 168: Reward=-0.150  SLA=0  Cost=0.1500
+Step 169: Reward=-0.150  SLA=0  Cost=0.1500
+Step 170: Reward=-0.150  SLA=0  Cost=0.1500
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 171: Reward=-1.120  SLA=0  Cost=0.1200
+Step 172: Reward=-1.150  SLA=0  Cost=0.1500
+Step 173: Reward=-1.120  SLA=0  Cost=0.1200
+Step 174: Reward=-1.090  SLA=0  Cost=0.0900
+Step 175: Reward=-1.120  SLA=0  Cost=0.1200
+Step 176: Reward=-1.090  SLA=0  Cost=0.0900
+Step 177: Reward=-1.120  SLA=0  Cost=0.1200
+Step 178: Reward=-246.065  SLA=1  Cost=0.0900
+Step 179: Reward=-2.150  SLA=0  Cost=0.1500
+Step 180: Reward=-1.120  SLA=0  Cost=0.1200
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=1/1 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 181: Reward=-1.150  SLA=0  Cost=0.1500
+Step 182: Reward=-0.150  SLA=0  Cost=0.1500
+Step 183: Reward=-0.150  SLA=0  Cost=0.1500
+Step 184: Reward=-0.150  SLA=0  Cost=0.1500
+Step 185: Reward=-0.150  SLA=0  Cost=0.1500
+Step 186: Reward=-0.150  SLA=0  Cost=0.1500
+Step 187: Reward=-0.150  SLA=0  Cost=0.1500
+Step 188: Reward=-0.150  SLA=0  Cost=0.1500
+Step 189: Reward=-0.150  SLA=0  Cost=0.1500
+Step 190: Reward=-0.150  SLA=0  Cost=0.1500
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=2/2 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 191: Reward=-1.120  SLA=0  Cost=0.1200
+Step 192: Reward=-1.150  SLA=0  Cost=0.1500
+Step 193: Reward=-2.090  SLA=0  Cost=0.0900
+Step 194: Reward=-1.120  SLA=0  Cost=0.1200
+Step 195: Reward=-1.090  SLA=0  Cost=0.0900
+Step 196: Reward=-1.120  SLA=0  Cost=0.1200
+Step 197: Reward=-1.090  SLA=0  Cost=0.0900
+Step 198: Reward=-1.120  SLA=0  Cost=0.1200
+Step 199: Reward=-1.150  SLA=0  Cost=0.1500
+Step 200: Reward=-1.120  SLA=0  Cost=0.1200
+--- Metrics snapshot ---
+  api: p95=26ms ready=2/2 queue=0.0
+  app: p95=19ms ready=1/1 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+
+📊 Episode Summary:
+   Total Reward: -3470.49
+   Total Cost: $26.4000
+   SLA Violations: 16
+   Avg P95 Latency: 245.7ms
+✅ Loaded agent from: ../agent.pth
+
+======================================================================
+TRAINED AGENT (Single-Agent DQN)
+======================================================================
+
+Step 001: Reward=-247.125  SLA=1  Cost=0.1500
+Step 002: Reward=-13.540  SLA=0  Cost=0.5400
+Step 003: Reward=-9.810  SLA=0  Cost=0.8100
+Step 004: Reward=-8.570  SLA=0  Cost=0.5700
+Step 005: Reward=-8.570  SLA=0  Cost=0.5700
+Step 006: Reward=-8.570  SLA=0  Cost=0.5700
+Step 007: Reward=-8.570  SLA=0  Cost=0.5700
+Step 008: Reward=-8.570  SLA=0  Cost=0.5700
+Step 009: Reward=-8.810  SLA=0  Cost=0.8100
+Step 010: Reward=-4.690  SLA=0  Cost=0.6900
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=9/9 queue=0.0
+  db: p95=16ms ready=5/5 queue=0.0
+
+Step 011: Reward=-4.810  SLA=0  Cost=0.8100
+Step 012: Reward=-0.810  SLA=0  Cost=0.8100
+Step 013: Reward=-12.450  SLA=0  Cost=0.4500
+Step 014: Reward=-10.150  SLA=0  Cost=0.1500
+Step 015: Reward=-2.090  SLA=0  Cost=0.0900
+Step 016: Reward=-0.090  SLA=0  Cost=0.0900
+Step 017: Reward=-0.090  SLA=0  Cost=0.0900
+Step 018: Reward=-106.827  SLA=1  Cost=0.0900
+Step 019: Reward=-7.300  SLA=0  Cost=0.3000
+Step 020: Reward=-246.305  SLA=1  Cost=0.3300
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=9999ms ready=1/1 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 021: Reward=-7.540  SLA=0  Cost=0.5400
+Step 022: Reward=-9.810  SLA=0  Cost=0.8100
+Step 023: Reward=-4.690  SLA=0  Cost=0.6900
+Step 024: Reward=-8.450  SLA=0  Cost=0.4500
+Step 025: Reward=-8.690  SLA=0  Cost=0.6900
+Step 026: Reward=-8.450  SLA=0  Cost=0.4500
+Step 027: Reward=-8.690  SLA=0  Cost=0.6900
+Step 028: Reward=-8.450  SLA=0  Cost=0.4500
+Step 029: Reward=-12.810  SLA=0  Cost=0.8100
+Step 030: Reward=-4.690  SLA=0  Cost=0.6900
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=9/9 queue=0.0
+  db: p95=16ms ready=5/5 queue=0.0
+
+Step 031: Reward=-4.810  SLA=0  Cost=0.8100
+Step 032: Reward=-6.630  SLA=0  Cost=0.6300
+Step 033: Reward=-14.210  SLA=0  Cost=0.2100
+Step 034: Reward=-4.090  SLA=0  Cost=0.0900
+Step 035: Reward=-0.090  SLA=0  Cost=0.0900
+Step 036: Reward=-0.090  SLA=0  Cost=0.0900
+Step 037: Reward=-0.090  SLA=0  Cost=0.0900
+Step 038: Reward=-245.065  SLA=1  Cost=0.0900
+Step 039: Reward=-7.300  SLA=0  Cost=0.3000
+Step 040: Reward=-1.330  SLA=0  Cost=0.3300
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=1/1 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 041: Reward=-16.810  SLA=0  Cost=0.8100
+Step 042: Reward=-4.690  SLA=0  Cost=0.6900
+Step 043: Reward=-0.690  SLA=0  Cost=0.6900
+Step 044: Reward=-8.450  SLA=0  Cost=0.4500
+Step 045: Reward=-8.690  SLA=0  Cost=0.6900
+Step 046: Reward=-8.450  SLA=0  Cost=0.4500
+Step 047: Reward=-8.690  SLA=0  Cost=0.6900
+Step 048: Reward=-8.450  SLA=0  Cost=0.4500
+Step 049: Reward=-8.690  SLA=0  Cost=0.6900
+Step 050: Reward=-4.810  SLA=0  Cost=0.8100
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=9/9 queue=0.0
+  db: p95=16ms ready=9/9 queue=0.0
+
+Step 051: Reward=-4.690  SLA=0  Cost=0.6900
+Step 052: Reward=-4.810  SLA=0  Cost=0.8100
+Step 053: Reward=-18.270  SLA=0  Cost=0.2700
+Step 054: Reward=-6.090  SLA=0  Cost=0.0900
+Step 055: Reward=-0.090  SLA=0  Cost=0.0900
+Step 056: Reward=-0.090  SLA=0  Cost=0.0900
+Step 057: Reward=-0.090  SLA=0  Cost=0.0900
+Step 058: Reward=-245.065  SLA=1  Cost=0.0900
+Step 059: Reward=-7.300  SLA=0  Cost=0.3000
+Step 060: Reward=-9.570  SLA=0  Cost=0.5700
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=1/1 queue=0.0
+  db: p95=16ms ready=9/9 queue=0.0
+
+Step 061: Reward=-12.690  SLA=0  Cost=0.6900
+Step 062: Reward=-4.810  SLA=0  Cost=0.8100
+Step 063: Reward=-4.690  SLA=0  Cost=0.6900
+Step 064: Reward=-4.570  SLA=0  Cost=0.5700
+Step 065: Reward=-8.570  SLA=0  Cost=0.5700
+Step 066: Reward=-8.570  SLA=0  Cost=0.5700
+Step 067: Reward=-8.570  SLA=0  Cost=0.5700
+Step 068: Reward=-8.570  SLA=0  Cost=0.5700
+Step 069: Reward=-8.810  SLA=0  Cost=0.8100
+Step 070: Reward=-4.690  SLA=0  Cost=0.6900
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=9/9 queue=0.0
+  db: p95=16ms ready=5/5 queue=0.0
+
+Step 071: Reward=-4.810  SLA=0  Cost=0.8100
+Step 072: Reward=-0.810  SLA=0  Cost=0.8100
+Step 073: Reward=-12.450  SLA=0  Cost=0.4500
+Step 074: Reward=-10.150  SLA=0  Cost=0.1500
+Step 075: Reward=-2.090  SLA=0  Cost=0.0900
+Step 076: Reward=-0.090  SLA=0  Cost=0.0900
+Step 077: Reward=-0.090  SLA=0  Cost=0.0900
+Step 078: Reward=-0.090  SLA=0  Cost=0.0900
+Step 079: Reward=-245.065  SLA=1  Cost=0.0900
+Step 080: Reward=-252.275  SLA=1  Cost=0.3000
+--- Metrics snapshot ---
+  api: p95=26ms ready=8/8 queue=0.0
+  app: p95=9999ms ready=1/1 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 081: Reward=-8.540  SLA=0  Cost=0.5400
+Step 082: Reward=-9.810  SLA=0  Cost=0.8100
+Step 083: Reward=-4.690  SLA=0  Cost=0.6900
+Step 084: Reward=-4.570  SLA=0  Cost=0.5700
+Step 085: Reward=-8.570  SLA=0  Cost=0.5700
+Step 086: Reward=-8.570  SLA=0  Cost=0.5700
+Step 087: Reward=-8.570  SLA=0  Cost=0.5700
+Step 088: Reward=-8.570  SLA=0  Cost=0.5700
+Step 089: Reward=-4.690  SLA=0  Cost=0.6900
+Step 090: Reward=-4.810  SLA=0  Cost=0.8100
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=9/9 queue=0.0
+  db: p95=16ms ready=9/9 queue=0.0
+
+Step 091: Reward=-0.810  SLA=0  Cost=0.8100
+Step 092: Reward=-6.630  SLA=0  Cost=0.6300
+Step 093: Reward=-12.630  SLA=0  Cost=0.6300
+Step 094: Reward=-14.210  SLA=0  Cost=0.2100
+Step 095: Reward=-4.090  SLA=0  Cost=0.0900
+Step 096: Reward=-0.090  SLA=0  Cost=0.0900
+Step 097: Reward=-0.090  SLA=0  Cost=0.0900
+Step 098: Reward=-0.090  SLA=0  Cost=0.0900
+Step 099: Reward=-245.065  SLA=1  Cost=0.0900
+Step 100: Reward=-7.300  SLA=0  Cost=0.3000
+--- Metrics snapshot ---
+  api: p95=26ms ready=8/8 queue=0.0
+  app: p95=19ms ready=1/1 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 101: Reward=-25.498  SLA=1  Cost=0.5700
+Step 102: Reward=-15.540  SLA=0  Cost=0.5400
+Step 103: Reward=-9.810  SLA=0  Cost=0.8100
+Step 104: Reward=-12.450  SLA=0  Cost=0.4500
+Step 105: Reward=-8.690  SLA=0  Cost=0.6900
+Step 106: Reward=-8.450  SLA=0  Cost=0.4500
+Step 107: Reward=-8.690  SLA=0  Cost=0.6900
+Step 108: Reward=-8.450  SLA=0  Cost=0.4500
+Step 109: Reward=-8.690  SLA=0  Cost=0.6900
+Step 110: Reward=-4.810  SLA=0  Cost=0.8100
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=9/9 queue=0.0
+  db: p95=16ms ready=9/9 queue=0.0
+
+Step 111: Reward=-0.810  SLA=0  Cost=0.8100
+Step 112: Reward=-0.810  SLA=0  Cost=0.8100
+Step 113: Reward=-18.270  SLA=0  Cost=0.2700
+Step 114: Reward=-6.090  SLA=0  Cost=0.0900
+Step 115: Reward=-0.090  SLA=0  Cost=0.0900
+Step 116: Reward=-0.090  SLA=0  Cost=0.0900
+Step 117: Reward=-0.090  SLA=0  Cost=0.0900
+Step 118: Reward=-245.065  SLA=1  Cost=0.0900
+Step 119: Reward=-7.300  SLA=0  Cost=0.3000
+Step 120: Reward=-1.330  SLA=0  Cost=0.3300
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=1/1 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 121: Reward=-16.810  SLA=0  Cost=0.8100
+Step 122: Reward=-4.690  SLA=0  Cost=0.6900
+Step 123: Reward=-0.690  SLA=0  Cost=0.6900
+Step 124: Reward=-8.450  SLA=0  Cost=0.4500
+Step 125: Reward=-8.690  SLA=0  Cost=0.6900
+Step 126: Reward=-8.450  SLA=0  Cost=0.4500
+Step 127: Reward=-8.690  SLA=0  Cost=0.6900
+Step 128: Reward=-8.450  SLA=0  Cost=0.4500
+Step 129: Reward=-12.810  SLA=0  Cost=0.8100
+Step 130: Reward=-4.690  SLA=0  Cost=0.6900
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=9/9 queue=0.0
+  db: p95=16ms ready=5/5 queue=0.0
+
+Step 131: Reward=-4.810  SLA=0  Cost=0.8100
+Step 132: Reward=-0.810  SLA=0  Cost=0.8100
+Step 133: Reward=-18.270  SLA=0  Cost=0.2700
+Step 134: Reward=-6.090  SLA=0  Cost=0.0900
+Step 135: Reward=-0.090  SLA=0  Cost=0.0900
+Step 136: Reward=-0.090  SLA=0  Cost=0.0900
+Step 137: Reward=-0.090  SLA=0  Cost=0.0900
+Step 138: Reward=-0.090  SLA=0  Cost=0.0900
+Step 139: Reward=-245.065  SLA=1  Cost=0.0900
+Step 140: Reward=-7.300  SLA=0  Cost=0.3000
+--- Metrics snapshot ---
+  api: p95=26ms ready=8/8 queue=0.0
+  app: p95=19ms ready=1/1 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 141: Reward=-17.810  SLA=0  Cost=0.8100
+Step 142: Reward=-4.690  SLA=0  Cost=0.6900
+Step 143: Reward=-0.690  SLA=0  Cost=0.6900
+Step 144: Reward=-8.450  SLA=0  Cost=0.4500
+Step 145: Reward=-8.690  SLA=0  Cost=0.6900
+Step 146: Reward=-8.450  SLA=0  Cost=0.4500
+Step 147: Reward=-8.690  SLA=0  Cost=0.6900
+Step 148: Reward=-8.450  SLA=0  Cost=0.4500
+Step 149: Reward=-12.810  SLA=0  Cost=0.8100
+Step 150: Reward=-4.690  SLA=0  Cost=0.6900
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=9/9 queue=0.0
+  db: p95=16ms ready=5/5 queue=0.0
+
+Step 151: Reward=-4.810  SLA=0  Cost=0.8100
+Step 152: Reward=-6.630  SLA=0  Cost=0.6300
+Step 153: Reward=-12.630  SLA=0  Cost=0.6300
+Step 154: Reward=-14.210  SLA=0  Cost=0.2100
+Step 155: Reward=-4.090  SLA=0  Cost=0.0900
+Step 156: Reward=-0.090  SLA=0  Cost=0.0900
+Step 157: Reward=-0.090  SLA=0  Cost=0.0900
+Step 158: Reward=-245.065  SLA=1  Cost=0.0900
+Step 159: Reward=-7.300  SLA=0  Cost=0.3000
+Step 160: Reward=-9.570  SLA=0  Cost=0.5700
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=1/1 queue=0.0
+  db: p95=16ms ready=9/9 queue=0.0
+
+Step 161: Reward=-245.545  SLA=1  Cost=0.5700
+Step 162: Reward=-15.540  SLA=0  Cost=0.5400
+Step 163: Reward=-9.810  SLA=0  Cost=0.8100
+Step 164: Reward=-12.450  SLA=0  Cost=0.4500
+Step 165: Reward=-8.690  SLA=0  Cost=0.6900
+Step 166: Reward=-8.450  SLA=0  Cost=0.4500
+Step 167: Reward=-8.690  SLA=0  Cost=0.6900
+Step 168: Reward=-8.450  SLA=0  Cost=0.4500
+Step 169: Reward=-12.810  SLA=0  Cost=0.8100
+Step 170: Reward=-4.690  SLA=0  Cost=0.6900
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=9/9 queue=0.0
+  db: p95=16ms ready=5/5 queue=0.0
+
+Step 171: Reward=-4.810  SLA=0  Cost=0.8100
+Step 172: Reward=-6.630  SLA=0  Cost=0.6300
+Step 173: Reward=-12.630  SLA=0  Cost=0.6300
+Step 174: Reward=-14.210  SLA=0  Cost=0.2100
+Step 175: Reward=-4.090  SLA=0  Cost=0.0900
+Step 176: Reward=-0.090  SLA=0  Cost=0.0900
+Step 177: Reward=-0.090  SLA=0  Cost=0.0900
+Step 178: Reward=-245.065  SLA=1  Cost=0.0900
+Step 179: Reward=-7.300  SLA=0  Cost=0.3000
+Step 180: Reward=-1.330  SLA=0  Cost=0.3300
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=1/1 queue=0.0
+  db: p95=16ms ready=1/1 queue=0.0
+
+Step 181: Reward=-253.545  SLA=1  Cost=0.5700
+Step 182: Reward=-15.540  SLA=0  Cost=0.5400
+Step 183: Reward=-9.810  SLA=0  Cost=0.8100
+Step 184: Reward=-4.690  SLA=0  Cost=0.6900
+Step 185: Reward=-8.450  SLA=0  Cost=0.4500
+Step 186: Reward=-8.690  SLA=0  Cost=0.6900
+Step 187: Reward=-8.450  SLA=0  Cost=0.4500
+Step 188: Reward=-8.690  SLA=0  Cost=0.6900
+Step 189: Reward=-8.450  SLA=0  Cost=0.4500
+Step 190: Reward=-12.810  SLA=0  Cost=0.8100
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=9/9 queue=0.0
+  db: p95=16ms ready=9/9 queue=0.0
+
+Step 191: Reward=-4.690  SLA=0  Cost=0.6900
+Step 192: Reward=-4.810  SLA=0  Cost=0.8100
+Step 193: Reward=-18.270  SLA=0  Cost=0.2700
+Step 194: Reward=-6.090  SLA=0  Cost=0.0900
+Step 195: Reward=-0.090  SLA=0  Cost=0.0900
+Step 196: Reward=-0.090  SLA=0  Cost=0.0900
+Step 197: Reward=-0.090  SLA=0  Cost=0.0900
+Step 198: Reward=-245.065  SLA=1  Cost=0.0900
+Step 199: Reward=-7.300  SLA=0  Cost=0.3000
+Step 200: Reward=-9.570  SLA=0  Cost=0.5700
+--- Metrics snapshot ---
+  api: p95=26ms ready=9/9 queue=0.0
+  app: p95=19ms ready=1/1 queue=0.0
+  db: p95=16ms ready=9/9 queue=0.0
+
+
+📊 Episode Summary:
+   Total Reward: -4833.67
+   Total Cost: $93.3600
+   SLA Violations: 16
+   Avg P95 Latency: 261.6ms
