@@ -114,22 +114,31 @@ def load_all_agents():
 
 
 def load_qmix():
-    """Load QMIX trained models"""
+    """Load QMIX trained models from the 'qmix_trained' directory"""
+    agents = ["api", "app", "db"]  # Or all agents from your env
+    models = {}
+    
     try:
-        checkpoint = torch.load("../qmix_checkpoints/qmix_best.pth", map_location="cpu")
-        agents = ["api", "app", "db"]
-        models = {}
-        
-        for i, agent in enumerate(agents):
+        for agent in agents:
+            # Correct path based on your 'ls' output
+            path = f"../qmix_trained/{agent}_actor_best.pth" 
+            
+            if not os.path.exists(path):
+                print(f"⚠️  Missing QMIX file for agent: {agent} at {path}")
+                return None # Fail if any agent is missing
+
             model = QNetwork().to("cpu")
-            model.load_state_dict(checkpoint["agent_nets"][i])
+            
+            # Load the state dict directly from the individual file
+            model.load_state_dict(torch.load(path, map_location="cpu"))
             model.eval()
             models[agent] = model
         
-        print(f"✅ Loaded QMIX from ../qmix_checkpoints/qmix_best.pth")
+        print(f"✅ Loaded QMIX models from ../qmix_trained/")
         return models
+        
     except Exception as e:
-        print(f"⚠️  Could not load QMIX: {e}")
+        print(f"⚠️  Could not load QMIX models: {e}")
         return None
 
 

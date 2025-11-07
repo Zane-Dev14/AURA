@@ -38,7 +38,7 @@ dependencies:
 
 # Simulation parameters
 simulation:
-  decision_interval_s: 30    # Agents act every 30 seconds
+  decision_interval_s: 10    # Agents act every 30 seconds
   max_steps: 200            # Episode = 200 steps = 100 minutes
 
 # Load generation pattern

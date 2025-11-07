@@ -13,7 +13,6 @@ Features:
 - Mixed precision support.
 - GPU cooldown every 30 epochs.
 """
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
