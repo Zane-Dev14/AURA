@@ -1,0 +1,56 @@
+services:
+  - name: api
+    base_latency_ms: 15      # API processing time
+    capacity_rps: 120        # Requests per second per pod
+    max_queue_size: 500
+    startup_times:
+      pending: 3.0           # Scheduling + image pull
+      container: 12.0        # Container creation
+      warmup: 10.0           # App initialization
+      ready: 25.0            # Total startup time
+  
+  - name: app
+    base_latency_ms: 8
+    capacity_rps: 150
+    max_queue_size: 800
+    startup_times:
+      pending: 3.0
+      container: 10.0
+      warmup: 8.0
+      ready: 21.0
+  
+  - name: db
+    base_latency_ms: 5
+    capacity_rps: 300        # DB can handle more
+    max_queue_size: 1000
+    startup_times:
+      pending: 2.0
+      container: 8.0
+      warmup: 5.0
+      ready: 15.0
+
+# Service dependencies (call graph)
+dependencies:
+  api:
+    - app      # API calls app
+  app:
+    - db       # App queries database
+
+# Simulation parameters
+simulation:
+  decision_interval_s: 30    # Agents act every 30 seconds
+  max_steps: 200            # Episode = 200 steps = 100 minutes
+
+# Load generation pattern
+load_pattern:
+  type: sine                # Options: sine, constant, spike
+  base_rps: 100            # Baseline traffic
+  amplitude: 80            # Sine wave amplitude
+  period_s: 600            # 10 minute cycle
+
+
+reward:
+  cost_weight: 1.0
+  sla_weight: 5.0          # less harsh on SLA spikes
+  flapping_weight: 1.0     # penalize scaling changes more
+  sla_threshold_ms: 200
