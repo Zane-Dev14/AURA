@@ -33,44 +33,44 @@ class QNetwork(nn.Module):
 # HPA Policy (K8s Horizontal Pod Autoscaler baseline)
 # =====================================================
 class HPAPolicy:
-    """
-    Mimics Kubernetes HPA behavior.
-    Only uses CPU utilization (like real HPA) for fair comparison.
-    """
-    def __init__(self, target_cpu=0.7, scale_up_threshold=0.8, scale_down_threshold=0.5):
+    def __init__(self, target_cpu=0.7, tolerance=0.1,
+                 scale_down_stabilization=5*60,  # seconds
+                 max_up_step=2, max_down_step=1,
+                 min_replicas=1, max_replicas=10):
         self.target_cpu = target_cpu
-        self.scale_up_threshold = scale_up_threshold
-        self.scale_down_threshold = scale_down_threshold
-        self.last_actions = {}
-        
+        self.tolerance = tolerance
+        self.scale_down_stabilization = scale_down_stabilization
+        self.max_up_step = max_up_step
+        self.max_down_step = max_down_step
+        self.min_replicas = min_replicas
+        self.max_replicas = max_replicas
+        self.history = {}
+    
     def get_actions(self, observations):
+        now = time.time()
         actions = {}
-        
         for agent, obs in observations.items():
-            # obs[0] is cpu_util normalized (divided by 2.0 in simulator)
-            cpu_util = obs[0] * 2.0  # Denormalize
+            cpu_util = obs[0] * 2.0
+            current = int(obs[9] * 20.0)
+            desired = self.history.get(agent, (now, current))[1]
+
+            ratio = cpu_util / self.target_cpu
+            if abs(ratio - 1.0) < self.tolerance:
+                # Within tolerance, do nothing
+                actions[agent] = current - 1
+                continue
             
-            # obs[9] is replicas_desired / 20.0
-            current_replicas = int(obs[9] * 20.0)
-            
-            if agent not in self.last_actions:
-                self.last_actions[agent] = max(1, current_replicas)
-            
-            desired = self.last_actions[agent]
-            
-            # HPA logic: scale based on CPU only
-            if cpu_util > self.scale_up_threshold:
-                if cpu_util > 1.2:
-                    desired = min(desired + 2, 10) # 1-10 replicas
-                else:
-                    desired = min(desired + 1, 10)
-            elif cpu_util < self.scale_down_threshold:
-                desired = max(desired - 1, 1)
-            
-            # Convert to action space (0-9)
-            actions[agent] = max(0, min(desired - 1, 9))
-            self.last_actions[agent] = desired
-            
+            raw_desired = int(np.ceil(current * ratio))
+            raw_desired = np.clip(raw_desired, self.min_replicas, self.max_replicas)
+
+            # Stabilization: don’t scale down too fast
+            last_t, last_desired = self.history.get(agent, (now, current))
+            if raw_desired < desired and (now - last_t) < self.scale_down_stabilization:
+                raw_desired = desired  # skip scale-down
+
+            raw_desired = int(np.clip(raw_desired, self.min_replicas, self.max_replicas))
+            actions[agent] = raw_desired - 1
+            self.history[agent] = (now, raw_desired)
         return actions
 
 
@@ -124,34 +124,35 @@ def load_all_agents():
 
 
 def load_qmix():
-    """Load QMIX trained models from the 'qmix_trained' directory"""
-    agents = ["api", "app", "db"]
-    models = {}
-    base_path = "../qmix_trained"
-    
-    if not os.path.exists(base_path):
-        print(f"⚠️  Could not find directory: {base_path}. Skipping QMIX.")
+    """Load QMIX trained models from simulator/qmix_checkpoints/qmix_final.pth"""
+    qmix_path = os.path.join("..", "qmix_checkpoints", "qmix_final.pth")
+
+    if not os.path.exists(qmix_path):
+        print(f"⚠️  QMIX checkpoint not found at {qmix_path}")
         return None
 
     try:
-        for agent in agents:
-            path = f"{base_path}/{agent}_actor_best.pth" 
-            
-            if not os.path.exists(path):
-                print(f"⚠️  Missing QMIX file for agent: {agent} at {path}")
-                print("⚠️  Skipping QMIX test as not all models are present.")
-                return None
+        checkpoint = torch.load(qmix_path, map_location="cpu")
 
+        # Load agent networks (stored as list)
+        agent_nets_state = checkpoint.get("agent_nets", None)
+        if agent_nets_state is None:
+            print("⚠️  No agent_nets found in checkpoint.")
+            return None
+
+        agents = ["api", "app", "db"]
+        models = {}
+        for i, agent in enumerate(agents):
             model = QNetwork().to("cpu")
-            model.load_state_dict(torch.load(path, map_location="cpu"))
+            model.load_state_dict(agent_nets_state[i])
             model.eval()
             models[agent] = model
-        
-        print(f"✅ Loaded QMIX models from ../qmix_trained/")
+
+        print(f"✅ Loaded QMIX joint checkpoint from {qmix_path}")
         return models
-        
+
     except Exception as e:
-        print(f"⚠️  Could not load QMIX models: {e}")
+        print(f"⚠️  Could not load QMIX checkpoint: {e}")
         return None
 
 
