@@ -50,7 +50,8 @@ load_pattern:
 
 
 reward:
-  cost_weight: 1.0
-  sla_weight: 5.0          # less harsh on SLA spikes
-  flapping_weight: 1.0     # penalize scaling changes more
-  sla_threshold_ms: 200
+  cost_weight: 2.5      # prioritize cost savings
+  sla_weight: 2.0       # reduce panic about SLA
+  flapping_weight: 1.5  # penalize thrashing less harshly
+  sla_threshold_ms: 350 # more lenient threshold
+

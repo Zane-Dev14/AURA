@@ -36,9 +36,9 @@ STEP_PER_EPOCH = 1000         # was 2000
 STEP_PER_COLLECT = 100        # was 200
 UPDATE_PER_STEP = 2.0         # was 1.0
 
-EPSILON_START = 0.1
+EPSILON_START = 0.2
 EPSILON_END = 0.01
-EPSILON_DECAY_EPOCHS = 120    # match faster training
+EPSILON_DECAY_EPOCHS = EPOCHS    # match faster training
 
 TARGET_UPDATE_FREQ = 200
 ESTIMATION_STEP = 1
@@ -56,6 +56,17 @@ TEST_ENVS = 4                 # was 2
 os.makedirs(SAVE_DIR, exist_ok=True)
 torch.manual_seed(SEED)
 np.random.seed(SEED)
+def print_scaling_info(obs, rewards, infos):
+    """
+    Pretty print:
+    - replicas per service
+    - reward contributions
+    """
+    replicas = {k: infos[k].get("replicas_desired", None) for k in infos.keys()}
+    latencies = {k: infos[k].get("p95_latency_ms", None) for k in infos.keys()}
+    print("Replicas:", replicas)
+    print("P95 Latency:", latencies)
+    print("Reward:", rewards)
 
 # CSV Logging
 log_path = os.path.join(SAVE_DIR, "train_log.csv")
@@ -83,7 +94,10 @@ class SingleAgentWrapper(gymnasium.Env):
 
     def step(self, action):
         actions = {ag: 2 for ag in self.agents}
-        actions[self.agent_id] = int(action)
+        # Clip actions to 0-5 (1-6 replicas) and penalize max replica action in reward
+        clipped_action = max(0, min(int(action), 5))
+        actions[self.agent_id] = clipped_action
+
 
         obs_dict, rewards, terms, truns, infos = self.env.step(actions)
         done = bool(terms.get(self.agent_id, False) or truns.get(self.agent_id, False))
@@ -217,6 +231,8 @@ if __name__ == "__main__":
     best_reward = -float("inf")
 
     for epoch in range(1, EPOCHS + 1):
+        last_best_info = None
+
         eps = max(EPSILON_END, EPSILON_START - (EPSILON_START - EPSILON_END) * epoch / EPSILON_DECAY_EPOCHS)
         policy.set_eps(eps)
 
@@ -258,6 +274,46 @@ if __name__ == "__main__":
                 torch.save(q_net.state_dict(), os.path.join(SAVE_DIR, f"{TRAIN_AGENT}_best.pth"))
                 print(f"✓ New best reward {mean_reward:.2f}")
 
+                # -----------------------
+                # SHOW SCALING INFO
+                # -----------------------
+                policy.set_eps(0.0)  # greedy
+                obs_episode, _ = test_envs.reset()
+                done_episode = [False] * test_envs.env_num
+                step_count = 0
+                episode_infos = []
+
+                while not all(done_episode) and step_count < 20:
+                    # Get actions from policy
+                    logits, _ = policy.model(obs_episode)
+                    actions = logits.argmax(dim=1).cpu().numpy()  # greedy actions
+
+                    # Step env
+                    obs_episode, rewards_step, terminateds, truncateds, infos_step = test_envs.step(actions)
+
+                    episode_infos.append((actions.copy(), rewards_step.copy(), infos_step.copy()))
+                    done_episode = [t or d for t, d in zip(done_episode, terminateds)]
+                    step_count += 1
+
+                # Show comparison with previous best
+                if last_best_info:
+                    print("--- Previous best snapshot ---")
+                    prev_actions = last_best_info["actions"]
+                    prev_rewards = last_best_info["rewards"]
+                    prev_infos = last_best_info["infos"]
+                    for i, agent_id in enumerate([TRAIN_AGENT]):
+                        print(f"{agent_id} | action: {prev_actions[i]} | reward: {prev_rewards[i]} | info: {prev_infos[i] if isinstance(prev_infos, list) else prev_infos}")
+
+                # Show new best snapshot
+                last_actions, last_rewards, last_infos = episode_infos[-1]
+                print(f"--- New best snapshot ---")
+                for i, agent_id in enumerate([TRAIN_AGENT]):
+                    print(f"{agent_id} | action: {last_actions[i]} | reward: {last_rewards[i]} | info: {last_infos[i] if isinstance(last_infos, list) else last_infos}")
+
+                # Update last_best_info
+                last_best_info = {"actions": last_actions, "rewards": last_rewards, "infos": last_infos}
+
+
             # log
             with open(log_path, "a", newline="") as f:
                 csv.writer(f).writerow([epoch, eps, avg_loss, 0, mean_reward, std_reward])
@@ -269,3 +325,4 @@ if __name__ == "__main__":
 
     torch.save(q_net.state_dict(), os.path.join(SAVE_DIR, f"{TRAIN_AGENT}_final.pth"))
     print("Training complete.")
+

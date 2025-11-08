@@ -1,187 +1,173 @@
 #!/usr/bin/env python3
 """
-qmixv1.py - QMIX trainer, GPU-focused, stable, delta-actions +/-2, PER, n-step, mixer-first.
-Replaces previous qmixv1.py (drop-in). Uses your simulator (no changes required).
+qmixv1.py -- Stable QMIX trainer
 
-Run:
-    python qmixv1.py
+Notes:
+- Keeps per-agent net architecture unchanged: obs_dim=16, action_dim=10 (0..9 -> 1..10 replicas).
+- Environment enforces actual applied replica changes <= +/- MAX_DELTA (2).
+- Vectorized envs run in subprocesses (SubprocVecEnv). All neural work on GPU.
+- Prioritized replay, n-step returns (N=3), mixer-first curriculum, double-DQN targets,
+  TD clipping, gradient clipping, LR warmup, per-agent snapshots.
 """
+
 import os
 import time
-import math
 import random
 from collections import deque, namedtuple
 from typing import List, Dict, Tuple
-import multiprocessing as mp
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import multiprocessing as mp
 
-# Import your simulator env wrapper
-from boutique_env import K8sAutoscaleEnv  # PettingZoo ParallelEnv wrapper you provided
+# Import your PettingZoo ParallelEnv wrapper
+from boutique_env import K8sAutoscaleEnv
 
-# ----------------------------
+# -----------------------------
 # Hyperparameters (tweakable)
-# ----------------------------
+# -----------------------------
 ENV_CONFIG = "config.yaml"
 SEED = 42
 
-# Delta actions: -2, -1, 0, +1, +2  -> 5 discrete outputs per agent
-DELTA_ACTIONS = np.array([-2, -1, 0, 1, 2], dtype=np.int64)
-N_DELTAS = len(DELTA_ACTIONS)
-MIN_REPLICAS = 1
-MAX_REPLICAS = 20
+# Epsilon schedule
+EPS_START = 0.10
+EPS_END = 0.02
+EPS_DECAY_EPOCHS = 80
 
-# model / training
-LR = 5e-4
-BATCH_SIZE = 2048           # large batch to utilize GPU (tune if OOM)
-GAMMA = 0.98
-REPLAY_SIZE = 600_000
+OBS_DIM = 16
+ACTION_DIM = 10  # model outputs 0..9 => replicas 1..10
+
+# Vectorization / performance
+N_ENVS = 8                    # number of subprocess envs (tweak to fit VRAM/CPU)
+REPLAY_SIZE = 400_000
 MIN_REPLAY_SIZE = 5_000
+
+LR = 5e-4
+BATCH_SIZE = 256              # reduce if OOM
+GAMMA = 0.98
+N_STEP = 3                    # n-step returns
+
 EPOCHS = 200
-STEPS_PER_EPOCH = 1000      # env steps per epoch (per env if vectorized)
-N_ENVS = 8                  # number of parallel envs (multiprocess)
-N_STEP = 3                  # n-step returns
+STEPS_PER_EPOCH = 1000        # env steps per epoch across all envs
+TARGET_UPDATE_FREQ = 200      # gradient steps
+MIXER_ONLY_EPOCHS = 30
 
-EPS_START = 0.1
-EPS_END = 0.01
-EPS_DECAY_EPOCHS = 150
-
-TARGET_UPDATE_FREQ = 200
-MIXING_HIDDEN = 32
-HYPERNET_HIDDEN = 64
-
-MIXER_ONLY_EPOCHS = 20
-
-# prioritized replay
+# Prioritized replay
 PRIO_ALPHA = 0.6
 PRIO_BETA_START = 0.4
 PRIO_BETA_FRAMES = EPOCHS * (STEPS_PER_EPOCH // 10 + 1)
 
-# reward scaling/clipping
-REWARD_CLIP = 10.0         # clip per-step reward magnitude after normalization
-REWARD_SCALE = 10.0        # divide raw reward by this (tune as needed)
+# Reward scaling/clipping
+REWARD_CLIP = 100.0
+REWARD_SCALE = 10.0  # divide raw reward by this before clipping
 
-# optimization & stability
+# Gradient / TD clipping
 GRAD_CLIP = 5.0
-TD_CLIP = 1e3
-WARMUP_STEPS = 1000
+TD_CLIP = 100.0
 
-# checkpointing
-DQN_AGENT_DIR = "./trained_agents"
-ALTERNATE_SINGLE_FILE = "agent.pth"
+# Action clamp: actual applied change limited to +/- MAX_DELTA
+MAX_DELTA = 2
+MIN_REPLICAS = 1
+MAX_REPLICAS = 20
+
+# Save locations
 SAVE_DIR = "./qmix_checkpoints"
+DQN_SAVE_DIR = "./trained_agents"   # per-agent DQN checkpoints expected here
+ALT_SINGLE = "agent.pth"            # fallback single-file checkpoint
 os.makedirs(SAVE_DIR, exist_ok=True)
-os.makedirs(DQN_AGENT_DIR, exist_ok=True)
+os.makedirs(DQN_SAVE_DIR, exist_ok=True)
 
-# reproducibility
-random.seed(SEED)
-np.random.seed(SEED)
-torch.manual_seed(SEED)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("Using device:", device)
+# -----------------------------
+# Utility data structures
+# -----------------------------
+Transition = namedtuple("Transition", [
+    "obs", "state", "actions", "reward", "next_obs", "next_state", "done"
+])
 
-# ----------------------------
-# Helper datatypes
-# ----------------------------
-Transition = namedtuple("Transition", ["obs", "state", "actions", "reward", "next_obs", "next_state", "done"])
+# ================================================================
+# Simple single-process vectorized environment (DummyVecEnv)
+# ================================================================
+class DummyVecEnv:
+    def __init__(self, n_envs, env_config):
+        from boutique_env import K8sAutoscaleEnv  # import here to avoid top-level issues
 
-# ----------------------------
-# Vectorized environment (simple subprocess workers)
-# ----------------------------
-# Each worker runs a K8sAutoscaleEnv instance and communicates via Pipes.
-def _env_worker(remote, parent_remote, env_config):
-    parent_remote.close()
-    env = K8sAutoscaleEnv(env_config)
-    # Create deterministic order of agents
-    possible_agents = list(env.possible_agents)
-    while True:
-        cmd, data = remote.recv()
-        if cmd == "reset":
-            obs_dict, infos = env.reset(seed=None, options=None)
-            # return obs dict and global state
-            state = env.get_global_state()
-            remote.send((obs_dict, state))
-        elif cmd == "reset_with_seed":
-            seed = data
-            obs_dict, infos = env.reset(seed=seed, options=None)
-            state = env.get_global_state()
-            remote.send((obs_dict, state))
-        elif cmd == "step":
-            actions = data  # dict agent->replicas
-            obs_dict, rewards, terminateds, truncateds, infos = env.step(actions)
-            state = env.get_global_state()
-            remote.send((obs_dict, rewards, terminateds, truncateds, infos, state))
-        elif cmd == "close":
-            env.close()
-            remote.close()
-            break
-        else:
-            remote.send(("unknown", None))
-
-class SubprocVecEnv:
-    """Minimal subprocess vector env to run multiple K8sAutoscaleEnv instances in parallel."""
-    def __init__(self, config_path: str, n_envs: int):
         self.n_envs = n_envs
-        self.remotes, self.work_remotes = zip(*[mp.Pipe() for _ in range(n_envs)])
-        self.ps = []
-        for work_remote, remote in zip(self.work_remotes, self.remotes):
-            p = mp.Process(target=_env_worker, args=(work_remote, remote, config_path))
-            p.daemon = True
-            p.start()
-            self.ps.append(p)
-            work_remote.close()
-
-        # probe agent ids from first env
-        self.remotes[0].send(("reset", None))
-        obs_dict, state = self.remotes[0].recv()
-        self.agent_ids = list(obs_dict.keys())
-        self.n_agents = len(self.agent_ids)
+        self.envs = [K8sAutoscaleEnv(env_config) for _ in range(n_envs)]
 
     def reset(self):
-        for r in self.remotes:
-            r.send(("reset", None))
-        results = [r.recv() for r in self.remotes]
-        obs_dicts, states = zip(*results)
-        return list(obs_dicts), list(states)
+        obs_list = []
+        infos_list = []
+        states_list = []
+        for env in self.envs:
+            obs, info = env.reset()
+            obs_list.append(obs)
+            infos_list.append(info)
+            states_list.append(info.get("state", None))
+        return obs_list, infos_list, states_list
 
-    def reset_with_seed(self, seed: int):
-        for i, r in enumerate(self.remotes):
-            r.send(("reset_with_seed", seed + i))
-        results = [r.recv() for r in self.remotes]
-        obs_dicts, states = zip(*results)
-        return list(obs_dicts), list(states)
+    def step(self, actions_batch):
+        """
+        actions_batch: list of dicts
+        [
+            {"api": a1, "app": a2, "db": a3},   # env 0 actions
+            ...
+        ]
+        """
+        obs_list = []
+        reward_list = []
+        terminated_list = []
+        truncated_list = []
+        infos_list = []
+        states_list = []
 
-    def step(self, actions_list: List[Dict[str, int]]):
-        # actions_list: list of dict per env
-        for r, a in zip(self.remotes, actions_list):
-            r.send(("step", a))
-        results = [r.recv() for r in self.remotes]
-        # each result: obs_dict, rewards, terminateds, truncateds, infos, state
-        obs_dicts, rewards, terms, truncs, infos, states = zip(*results)
-        return list(obs_dicts), list(rewards), list(terms), list(truncs), list(infos), list(states)
+        for env, actions in zip(self.envs, actions_batch):
+
+            obs, reward, terminated, truncated, info = env.step(actions)
+
+            # Fallback if env returns combined done
+            if isinstance(terminated, bool) and isinstance(truncated, bool):
+                done_terminated = terminated
+                done_truncated = truncated
+            else:
+                # If env returns a single "done"
+                done = terminated or truncated
+                done_terminated = done
+                done_truncated = False
+
+            obs_list.append(obs)
+            reward_list.append(reward)
+            terminated_list.append(done_terminated)
+            truncated_list.append(done_truncated)
+            infos_list.append(info)
+            states_list.append(info.get("state", None))
+
+        return (
+            obs_list,
+            reward_list,
+            terminated_list,
+            truncated_list,
+            infos_list,
+            states_list,
+        )
 
     def close(self):
-        for r in self.remotes:
-            try:
-                r.send(("close", None))
-            except:
-                pass
-        for p in self.ps:
-            p.join(timeout=1)
+        for env in self.envs:
+            if hasattr(env, "close"):
+                env.close()
 
-# ----------------------------
-# Prioritized replay (proportional)
-# ----------------------------
+
+# -----------------------------
+# Prioritized replay buffer
+# -----------------------------
 class PrioritizedReplay:
-    def __init__(self, capacity: int, alpha: float):
+    def __init__(self, capacity: int, alpha: float = 0.6):
         self.capacity = int(capacity)
         self.alpha = alpha
         self.pos = 0
         self.full = False
-        self.buffer = [None] * self.capacity
+        self.buf: List[Transition] = [None] * self.capacity
         self.priorities = np.zeros(self.capacity, dtype=np.float32)
         self.eps = 1e-6
 
@@ -189,36 +175,35 @@ class PrioritizedReplay:
         return self.capacity if self.full else self.pos
 
     def push(self, *args):
-        transition = Transition(*args)
-        self.buffer[self.pos] = transition
-        max_prio = self.priorities.max() if (self.pos > 0 or self.full) else 1.0
-        if max_prio <= 0:
-            max_prio = 1.0
-        self.priorities[self.pos] = max_prio
+        t = Transition(*args)
+        self.buf[self.pos] = t
+        max_p = self.priorities.max() if (self.pos > 0 or self.full) else 1.0
+        if max_p <= 0:
+            max_p = 1.0
+        self.priorities[self.pos] = max_p
         self.pos += 1
         if self.pos >= self.capacity:
             self.full = True
             self.pos = 0
 
     def sample(self, batch_size: int, beta: float = 0.4):
-        N = len(self)
-        assert N > 0, "Buffer empty"
-        prios = self.priorities[:N].astype(np.float64)
+        length = len(self)
+        assert length > 0, "Empty buffer"
+        prios = self.priorities[:length].astype(np.float64)
         probs = prios ** self.alpha
-        probs_sum = probs.sum()
-        if probs_sum <= 0:
-            probs = np.ones_like(probs) / N
+        total = probs.sum()
+        if total <= 0:
+            probs = np.ones_like(probs) / length
         else:
-            probs = probs / probs_sum
-        indices = np.random.choice(N, batch_size, p=probs)
-        samples = [self.buffer[i] for i in indices]
-        weights = (N * probs[indices]) ** (-beta)
-        weights = weights / weights.max()
-        # convert to arrays
-        obs = np.stack([s.obs for s in samples]).astype(np.float32)          # (B, n_agents, obs_dim)
-        state = np.stack([s.state for s in samples]).astype(np.float32)      # (B, state_dim)
-        actions = np.stack([s.actions for s in samples]).astype(np.int64)    # (B, n_agents)
-        rewards = np.array([s.reward for s in samples], dtype=np.float32)    # (B,)
+            probs = probs / total
+        indices = np.random.choice(length, batch_size, p=probs)
+        samples = [self.buf[i] for i in indices]
+        weights = (length * probs[indices]) ** (-beta)
+        weights = weights / (weights.max() + 1e-12)
+        obs = np.stack([s.obs for s in samples]).astype(np.float32)
+        state = np.stack([s.state for s in samples]).astype(np.float32)
+        actions = np.stack([s.actions for s in samples]).astype(np.int64)
+        rewards = np.array([s.reward for s in samples], dtype=np.float32)
         next_obs = np.stack([s.next_obs for s in samples]).astype(np.float32)
         next_state = np.stack([s.next_state for s in samples]).astype(np.float32)
         dones = np.array([s.done for s in samples], dtype=np.float32)
@@ -228,15 +213,15 @@ class PrioritizedReplay:
             "indices": indices, "weights": weights
         }
 
-    def update_priorities(self, indices, priorities):
+    def update_priorities(self, indices: np.ndarray, priorities: np.ndarray):
         for idx, p in zip(indices, priorities):
             self.priorities[idx] = max(p, self.eps)
 
-# ----------------------------
-# Networks
-# ----------------------------
+# -----------------------------
+# Networks (same architecture as DQN checkpoint)
+# -----------------------------
 class AgentNet(nn.Module):
-    def __init__(self, obs_dim: int, n_actions: int):
+    def __init__(self, obs_dim: int, action_dim: int):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(obs_dim, 256),
@@ -245,21 +230,34 @@ class AgentNet(nn.Module):
             nn.GELU(),
             nn.Linear(256, 128),
             nn.GELU(),
-            nn.Linear(128, n_actions)
+            nn.Linear(128, action_dim)
         )
     def forward(self, x):
         return self.net(x)
 
 class MixingNetwork(nn.Module):
-    def __init__(self, n_agents: int, state_dim: int, mixing_hidden=MIXING_HIDDEN, hyper_hidden=HYPERNET_HIDDEN):
+    def __init__(self, n_agents: int, state_dim: int, mixing_hidden=32, hyper_hidden=64):
         super().__init__()
         self.n_agents = n_agents
         self.mixing_hidden = mixing_hidden
-        self.hyper_w1 = nn.Sequential(nn.Linear(state_dim, hyper_hidden), nn.ReLU(), nn.Linear(hyper_hidden, n_agents * mixing_hidden))
-        self.hyper_b1 = nn.Sequential(nn.Linear(state_dim, hyper_hidden), nn.ReLU(), nn.Linear(hyper_hidden, mixing_hidden))
-        self.hyper_w2 = nn.Sequential(nn.Linear(state_dim, hyper_hidden), nn.ReLU(), nn.Linear(hyper_hidden, mixing_hidden))
-        self.hyper_b2 = nn.Sequential(nn.Linear(state_dim, hyper_hidden), nn.ReLU(), nn.Linear(hyper_hidden, 1))
+        self.hyper_w1 = nn.Sequential(
+            nn.Linear(state_dim, hyper_hidden), nn.ReLU(),
+            nn.Linear(hyper_hidden, n_agents * mixing_hidden)
+        )
+        self.hyper_b1 = nn.Sequential(
+            nn.Linear(state_dim, hyper_hidden), nn.ReLU(),
+            nn.Linear(hyper_hidden, mixing_hidden)
+        )
+        self.hyper_w2 = nn.Sequential(
+            nn.Linear(state_dim, hyper_hidden), nn.ReLU(),
+            nn.Linear(hyper_hidden, mixing_hidden)
+        )
+        self.hyper_b2 = nn.Sequential(
+            nn.Linear(state_dim, hyper_hidden), nn.ReLU(),
+            nn.Linear(hyper_hidden, 1)
+        )
         self.elu = nn.ELU()
+
     def forward(self, agent_qs, state):
         B = agent_qs.size(0)
         w1 = self.hyper_w1(state).view(B, self.n_agents, self.mixing_hidden)
@@ -269,75 +267,104 @@ class MixingNetwork(nn.Module):
         hidden = self.elu(hidden)
         w2 = self.hyper_w2(state).view(B, self.mixing_hidden, 1)
         b2 = self.hyper_b2(state).view(B, 1)
-        q_tot = torch.bmm(hidden.view(B,1,self.mixing_hidden), w2).squeeze(2) + b2
+        q_tot = torch.bmm(hidden.view(B, 1, self.mixing_hidden), w2).squeeze(2) + b2
         return q_tot  # (B,1)
 
-# ----------------------------
-# N-step helper
-# ----------------------------
-class NStepBuffer:
-    def __init__(self, n_step: int, gamma: float):
-        self.n = n_step
-        self.gamma = gamma
-        self.buf = deque()
+# -----------------------------
+# SubprocVecEnv: each worker runs a K8sAutoscaleEnv instance.
+# The clamp of +/- MAX_DELTA is enforced inside the worker.
+# -----------------------------
+def worker_process(pipe, env_config: str):
+    parent, child = pipe
+    child.close()
+    env = K8sAutoscaleEnv(env_config)
+    try:
+        while True:
+            cmd, data = parent.recv()
+            if cmd == "reset":
+                obs, infos = env.reset(seed=data.get("seed", None), options=None)
+                parent.send((obs, infos, env.get_global_state() if hasattr(env, "get_global_state") else None))
+            elif cmd == "step":
+                actions = data  # dict agent->action(0..9)
+                # Allow full range 0..9, but let the reward penalize over-scaling
+            clamped_actions = {}
+            for name, desired in actions.items():
+                # +1 because actions are 0-indexed (0->1 replica)
+                final = int(desired) + 1
+                
+                # Ensure within absolute min/max bounds
+                final = max(MIN_REPLICAS, min(MAX_REPLICAS, final))
+                
+                clamped_actions[name] = final
 
-    def push(self, obs, state, actions, reward, next_obs, next_state, done):
-        self.buf.append((obs, state, actions, reward, next_obs, next_state, done))
-        if len(self.buf) < self.n:
-            return None
-        # compute n-step return
-        ret = 0.0
-        for i in range(self.n):
-            r = self.buf[i][3]
-            ret += (self.gamma ** i) * r
-        obs0, state0, actions0 = self.buf[0][0], self.buf[0][1], self.buf[0][2]
-        next_obs_n, next_state_n, done_n = self.buf[-1][4], self.buf[-1][5], self.buf[-1][6]
-        self.buf.popleft()
-        return (obs0, state0, actions0, ret, next_obs_n, next_state_n, done_n)
+                obs, rewards, terminateds, truncateds, infos = env.step(clamped_actions)
+                parent.send((obs, rewards, terminateds, truncateds, infos, env.get_global_state() if hasattr(env, "get_global_state") else None))
+            elif cmd == "close":
+                parent.send(("closed", None))
+                parent.close()
+                break
+            else:
+                parent.send(("unknown_cmd", None))
+    except EOFError:
+        # main process died; exit gracefully
+        pass
 
-    def flush(self):
-        outs = []
-        while self.buf:
-            ret = 0.0
-            for i in range(len(self.buf)):
-                ret += (self.gamma ** i) * self.buf[i][3]
-            obs0, state0, actions0 = self.buf[0][0], self.buf[0][1], self.buf[0][2]
-            next_obs_n, next_state_n, done_n = self.buf[-1][4], self.buf[-1][5], self.buf[-1][6]
-            outs.append((obs0, state0, actions0, ret, next_obs_n, next_state_n, done_n))
-            self.buf.popleft()
-        return outs
+class SubprocVecEnv:
+    def __init__(self, n_envs: int, env_config: str):
+        self.n_envs = int(n_envs)
+        self.env_config = env_config
+        self.parents = []
+        self.procs = []
+        for _ in range(self.n_envs):
+            parent_conn, child_conn = mp.Pipe()
+            p = mp.Process(target=worker_process, args=((parent_conn, child_conn), env_config))
+            p.daemon = True
+            p.start()
+            child_conn.close()
+            self.parents.append(parent_conn)
+            self.procs.append(p)
 
-# ----------------------------
-# Utility functions
-# ----------------------------
-def sanitize(a: np.ndarray, clip: float = 1e6) -> np.ndarray:
+    def reset(self):
+        for parent in self.parents:
+            parent.send(("reset", {}))
+        results = [parent.recv() for parent in self.parents]
+        obs_list, infos_list, states = zip(*results)
+        return list(obs_list), list(infos_list), list(states)
+
+    def step(self, actions_list: List[Dict[str, int]]):
+        for parent, act in zip(self.parents, actions_list):
+            parent.send(("step", act))
+        results = [parent.recv() for parent in self.parents]
+        obs_list, rewards_list, terminateds_list, truncateds_list, infos_list, states = zip(*results)
+        return list(obs_list), list(rewards_list), list(terminateds_list), list(truncateds_list), list(infos_list), list(states)
+
+    def close(self):
+        for parent in self.parents:
+            try:
+                parent.send(("close", {}))
+                _ = parent.recv()
+            except Exception:
+                pass
+        for p in self.procs:
+            p.join(timeout=0.1)
+
+# -----------------------------
+# Helpers
+# -----------------------------
+def sanitize(a: np.ndarray, clip=1e6):
     a = np.nan_to_num(a, nan=0.0, posinf=clip, neginf=-clip)
     return np.clip(a, -clip, clip).astype(np.float32)
 
-def clamp_replicas(prev: int, delta: int) -> int:
-    new = int(prev + int(delta))
-    return max(MIN_REPLICAS, min(MAX_REPLICAS, new))
+def beta_by_frame(frame_idx: int):
+    return min(1.0, PRIO_BETA_START + frame_idx * (1.0 - PRIO_BETA_START) / max(1, PRIO_BETA_FRAMES))
 
-# ----------------------------
-# Build env & dims
-# ----------------------------
-def build_envs(n_envs: int):
-    venv = SubprocVecEnv(ENV_CONFIG, n_envs)
-    agent_ids = venv.agent_ids
-    n_agents = venv.n_agents
-    # compute state dim by resetting
-    obs_dicts, states = venv.reset()
-    state_dim = int(states[0].size)
-    obs_dim = int(next(iter(obs_dicts[0].values())).shape[0])
-    return venv, agent_ids, n_agents, state_dim, obs_dim
-
-# ----------------------------
-# Warm-start loader
-# ----------------------------
-def try_load_per_agent(agent_nets: List[nn.Module], agent_ids: List[str]) -> int:
+# -----------------------------
+# Loading per-agent checkpoints (safe, flexible)
+# -----------------------------
+def try_load_per_agent(agent_nets: List[nn.Module], agent_ids: List[str], device):
     loaded = 0
     for i, aid in enumerate(agent_ids):
-        fn = os.path.join(DQN_AGENT_DIR, f"{aid}_best.pth")
+        fn = os.path.join(DQN_SAVE_DIR, f"{aid}_best.pth")
         if os.path.exists(fn):
             try:
                 ck = torch.load(fn, map_location=device)
@@ -351,44 +378,73 @@ def try_load_per_agent(agent_nets: List[nn.Module], agent_ids: List[str]) -> int
                 print(f"Loaded per-agent checkpoint for {aid} from {fn}")
             except Exception as e:
                 print(f"Failed loading {fn}: {e}")
-    # fallback single-file
-    if loaded == 0:
-        single = os.path.join(DQN_AGENT_DIR, ALTERNATE_SINGLE_FILE) if os.path.exists(os.path.join(DQN_AGENT_DIR, ALTERNATE_SINGLE_FILE)) else ALTERNATE_SINGLE_FILE
-        if os.path.exists(single):
-            try:
-                ck = torch.load(single, map_location=device)
-                if isinstance(ck, dict):
-                    for i, aid in enumerate(agent_ids):
-                        if f"agent_{aid}" in ck:
-                            try:
-                                agent_nets[i].load_state_dict(ck[f"agent_{aid}"], strict=False)
-                                loaded += 1
-                            except Exception:
-                                pass
-                    if loaded == 0:
-                        for i in range(len(agent_nets)):
-                            try:
-                                agent_nets[i].load_state_dict(ck, strict=False)
-                                loaded = len(agent_nets)
-                            except Exception:
-                                pass
-                        if loaded > 0:
-                            print("Loaded single-file checkpoint into all agents")
-            except Exception as e:
-                print(f"Failed loading single-file checkpoint {single}: {e}")
+    if loaded > 0:
+        return loaded
+    # fallback to single-file checkpoint if present
+    single = os.path.join(DQN_SAVE_DIR, ALT_SINGLE) if os.path.exists(os.path.join(DQN_SAVE_DIR, ALT_SINGLE)) else ALT_SINGLE
+    if os.path.exists(single):
+        try:
+            ck = torch.load(single, map_location=device)
+            if isinstance(ck, dict):
+                for i, aid in enumerate(agent_ids):
+                    if f"agent_{aid}" in ck:
+                        try:
+                            agent_nets[i].load_state_dict(ck[f"agent_{aid}"], strict=False)
+                            loaded += 1
+                            print(f"Loaded {aid} from {single}['agent_{aid}']")
+                        except Exception:
+                            pass
+                if loaded == 0:
+                    # try load same ck into all
+                    for i in range(len(agent_nets)):
+                        agent_nets[i].load_state_dict(ck, strict=False)
+                    loaded = len(agent_nets)
+                    print(f"Loaded single-file checkpoint into all agents from {single}")
+        except Exception as e:
+            print("Failed fallback single-file load:", e)
     return loaded
 
-# ----------------------------
-# TRAIN
-# ----------------------------
+# -----------------------------
+# Build env dims helper
+# -----------------------------
+def build_env_and_dims():
+    env = K8sAutoscaleEnv(ENV_CONFIG)
+    agent_ids = list(env.possible_agents)
+    n_agents = len(agent_ids)
+    # get state dim from env's get_global_state (if present) else concat obs
+    try:
+        _, _ = env.reset()
+        state = env.get_global_state()
+        state_dim = int(state.size)
+    except Exception:
+        sample_obs, _ = env.reset()
+        state = np.concatenate([sample_obs[a] for a in agent_ids], axis=0)
+        state_dim = state.size
+    obs_dim = int(env.observation_space(agent_ids[0]).shape[0])
+    return agent_ids, n_agents, state_dim, obs_dim
+
+# -----------------------------
+# Main training loop
+# -----------------------------
 def main():
-    # build vectorized envs
-    venv, agent_ids, n_agents, state_dim, obs_dim = build_envs(N_ENVS)
+    # Set multiprocess start method early (only in main)
+    mp.set_start_method("spawn", force=True)
+
+    # device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Device:", device)
+
+    random.seed(SEED)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
+
+    # build dims
+    agent_ids, n_agents, state_dim, obs_dim = build_env_and_dims()
     print(f"Agents detected: {agent_ids} | n_agents={n_agents} | state_dim={state_dim} | obs_dim={obs_dim}")
 
-    # models on device: output n_actions = N_DELTAS
-    agent_nets = [AgentNet(obs_dim, N_DELTAS).to(device) for _ in range(n_agents)]
-    target_agent_nets = [AgentNet(obs_dim, N_DELTAS).to(device) for _ in range(n_agents)]
+    # networks
+    agent_nets = [AgentNet(obs_dim, ACTION_DIM).to(device) for _ in range(n_agents)]
+    target_agent_nets = [AgentNet(obs_dim, ACTION_DIM).to(device) for _ in range(n_agents)]
     for t, s in zip(target_agent_nets, agent_nets):
         t.load_state_dict(s.state_dict())
 
@@ -396,8 +452,8 @@ def main():
     target_mixer = MixingNetwork(n_agents, state_dim).to(device)
     target_mixer.load_state_dict(mixer.state_dict())
 
-    # warm-start
-    loaded = try_load_per_agent(agent_nets, agent_ids)
+    # warm-start per-agent nets if available
+    loaded = try_load_per_agent(agent_nets, agent_ids, device)
     if loaded > 0:
         for i in range(n_agents):
             target_agent_nets[i].load_state_dict(agent_nets[i].state_dict())
@@ -405,335 +461,281 @@ def main():
     else:
         print("No per-agent warm-start found. Training from scratch.")
 
-    # optimizer: mixer-first curriculum
+    # prepare optimizer: start with mixer-only if we warmed up
     mixer_params = list(mixer.parameters())
     agent_params = [p for net in agent_nets for p in net.parameters()]
     use_mixer_only = MIXER_ONLY_EPOCHS > 0 and loaded > 0
     if use_mixer_only:
-        optimizer = torch.optim.Adam(mixer_params, lr=LR)
-        print(f"Using mixer-only curriculum for first {MIXER_ONLY_EPOCHS} epochs")
-    else:
-        optimizer = torch.optim.Adam(agent_params + mixer_params, lr=LR)
+        print(f"Using mixer-only curriculum for first {MIXER_ONLY_EPOCHS} epochs.")
+        optimizer = torch.optim.Adam([
+            {"params": agent_params, "lr": 1e-4},
+            {"params": mixer_params, "lr": 5e-4}
+        ])
 
+    else:
+        optimizer = torch.optim.Adam([
+            {"params": agent_params, "lr": 1e-4},
+            {"params": mixer_params, "lr": 5e-4}
+        ])
     # LR warmup scheduler
+    total_steps_est = EPOCHS * max(1, STEPS_PER_EPOCH // 10)
     def lr_lambda(step):
-        return min(1.0, float(step) / max(1, WARMUP_STEPS))
+        warmup = max(1, min(2000, total_steps_est // 10))
+        if step < warmup:
+            return float(step) / float(max(1, warmup))
+        return 1.0
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
     # replay
-    buffer = PrioritizedReplay(REPLAY_SIZE, PRIO_ALPHA)
+    replay = PrioritizedReplay(REPLAY_SIZE, alpha=PRIO_ALPHA)
 
-    # per-env n-step buffers
-    nstep_buffers = [NStepBuffer(N_STEP, GAMMA) for _ in range(N_ENVS)]
+    # vectorized envs (workers)
+    vec_env = DummyVecEnv(N_ENVS, ENV_CONFIG)
+
 
     # training bookkeeping
-    gradient_steps = 0
-    total_steps = 0
+    grad_steps = 0
+    total_frames = 0
     best_eval = -1e18
     prev_best_actions = None
 
-    # target beta schedule
-    def beta_by_frame(frame):
-        return min(1.0, PRIO_BETA_START + frame * (1.0 - PRIO_BETA_START) / max(1, PRIO_BETA_FRAMES))
-
     print("Starting training loop...")
+    start_time = time.time()
     for epoch in range(1, EPOCHS + 1):
         epoch_start = time.time()
-        # linear epsilon schedule (shared for simplicity)
-        eps = max(EPS_END, EPS_START + (EPS_END - EPS_START) * (epoch / EPS_DECAY_EPOCHS))
-        steps_needed = STEPS_PER_EPOCH
+        # compute epsilon (linear decay)
+        eps = max(EPS_END, EPS_START + (EPS_END - EPS_START) * (epoch / max(1, EPS_DECAY_EPOCHS)))
+
+        # Collect STEPS_PER_EPOCH transitions across N_ENVS
         steps_collected = 0
+        env_obs_list, _infos_list, states_list = vec_env.reset()
+        env_states = [np.stack([obsd[a] for a in agent_ids], axis=0).astype(np.float32) for obsd in env_obs_list]
 
-        # collect in parallel: run each env until we've collected STEPS_PER_EPOCH total (summed across venvs)
-        # we'll step each env once per loop so that all envs proceed roughly in lockstep
-        # Initialize env states if first epoch or after episodes ended
-        # Use reset for each env if needed
-        obs_dicts, states = venv.reset()  # list length N_ENVS
-        # For each env, maintain current obs_arr and current replicas (we will query from env via infos occasionally)
-        # We will infer current replicas from agent observations: obs[9] = replicas_desired/20.0 (index used in simulator)
-        current_replicas = []
-        for env_obs in obs_dicts:
-            # take replicas_desired from observations
-            replicas = []
-            for aid in agent_ids:
-                o = env_obs[aid]
-                # field index 9 is replicas_desired/20.0 as per simulator
-                rep = int(round(o[9] * MAX_REPLICAS))
-                rep = max(MIN_REPLICAS, min(MAX_REPLICAS, rep))
-                replicas.append(rep)
-            current_replicas.append(replicas)
+        # per-env n-step buffers
+        nstep_buffers = [deque() for _ in range(N_ENVS)]
 
-        while steps_collected < steps_needed:
-            # build actions_list for all envs
-            actions_list = []
-            delta_list_per_env = []  # store chosen deltas for logging
-            for env_idx in range(N_ENVS):
-                obs_dict = obs_dicts[env_idx]
-                obs_arr = np.stack([obs_dict[a] for a in agent_ids], axis=0).astype(np.float32)  # (n_agents, obs_dim)
-                deltas = []
-                action_dict = {}
-                for i, aid in enumerate(agent_ids):
-                    obs_i = torch.tensor(obs_arr[i:i+1], dtype=torch.float32, device=device)
+        while steps_collected < STEPS_PER_EPOCH:
+            actions_batch = []
+            for env_i in range(N_ENVS):
+                obs_arr = env_states[env_i]  # (n_agents, obs_dim)
+                per_env_actions = {}
+                for ai, aid in enumerate(agent_ids):
+                    obs_tensor = torch.tensor(obs_arr[ai:ai+1], dtype=torch.float32, device=device)
                     with torch.no_grad():
-                        qvals = agent_nets[i](obs_i)  # (1, N_DELTAS)
-                        if random.random() < eps:
-                            a_idx = random.randrange(N_DELTAS)
-                        else:
-                            a_idx = int(qvals.argmax(dim=1).item())
-                    delta = int(DELTA_ACTIONS[a_idx])
-                    prev_rep = current_replicas[env_idx][i]
-                    desired = clamp_replicas(prev_rep, delta)
-                    action_dict[aid] = int(desired)
-                    deltas.append(delta)
-                actions_list.append(action_dict)
-                delta_list_per_env.append(deltas)
+                        q = agent_nets[ai](obs_tensor)
+                    if random.random() < eps:
+                        act = random.randrange(ACTION_DIM)
+                    else:
+                        act = int(q.argmax(dim=1).item())
+                    per_env_actions[aid] = act
+                actions_batch.append(per_env_actions)
 
-            # step all envs in parallel
-            next_obs_dicts, rewards_list, terms_list, truncs_list, infos_list, next_states = venv.step(actions_list)
+            # step all envs
+            next_obs_list, rewards_list, terms_list, truncs_list, infos_list, states_list = vec_env.step(actions_batch)
 
-            # push transitions (n-step)
-            for env_idx in range(N_ENVS):
-                obs_dict = obs_dicts[env_idx]
-                state = states[env_idx]
-                next_obs = next_obs_dicts[env_idx]
-                next_state = next_states[env_idx]
-                rewards = rewards_list[env_idx]
-                # shared reward extraction
-                if isinstance(rewards, dict):
-                    r_raw = float(list(rewards.values())[0])
-                else:
-                    r_raw = float(rewards)
-                # reward scaling + clipping
-                r_scaled = float(np.clip(r_raw / REWARD_SCALE, -REWARD_CLIP, REWARD_CLIP))
-                done_flag = any(terms_list[env_idx].values()) if isinstance(terms_list[env_idx], dict) else bool(terms_list[env_idx])
+            for env_i in range(N_ENVS):
+                obs_arr = env_states[env_i]
+                next_obs_arr = np.stack([next_obs_list[env_i][a] for a in agent_ids], axis=0).astype(np.float32)
+                r_raw = rewards_list[env_i]
+                r = float(list(r_raw.values())[0]) if isinstance(r_raw, dict) else float(r_raw)
+                r = float(np.clip(r / REWARD_SCALE, -REWARD_CLIP, REWARD_CLIP))
+                done_flag = any(terms_list[env_i].values()) if isinstance(terms_list[env_i], dict) else bool(terms_list[env_i])
+                state_vec = states_list[env_i] if states_list[env_i] is not None else np.concatenate([next_obs_arr[a] for a in range(len(agent_ids))], axis=0)
 
-                # build arrays for obs/next_obs (n_agents, obs_dim)
-                obs_arr = np.stack([obs_dict[a] for a in agent_ids], axis=0).astype(np.float32)
-                next_obs_arr = np.stack([next_obs[a] for a in agent_ids], axis=0).astype(np.float32)
-                # actions taken are absolute replicas in action_list[env_idx] (1..20), but we store them as ints
-                actions_array = np.array([actions_list[env_idx][aid] for aid in agent_ids], dtype=np.int64)
+                action_list = np.array([actions_batch[env_i][aid] for aid in agent_ids], dtype=np.int64)
 
-                # push into that env's n-step buffer; when it returns an n-step output, push to PER buffer
-                out = nstep_buffers[env_idx].push(sanitize(obs_arr), state.astype(np.float32),
-                                                  actions_array, r_scaled,
-                                                  sanitize(next_obs_arr), next_state.astype(np.float32), done_flag)
-                if out is not None:
-                    buffer.push(*out)
-                # if episode ended, flush buffer
-                if done_flag:
-                    for rem in nstep_buffers[env_idx].flush():
-                        buffer.push(*rem)
-                # update pointers
-                obs_dicts[env_idx] = next_obs
-                states[env_idx] = next_state
-                # update current replicas for delta smoothing use
-                current_replicas[env_idx] = [int(round(next_obs[a][9] * MAX_REPLICAS)) for a in agent_ids]
+                # append raw step to n-step buffer
+                nstep_buffers[env_i].append((sanitize(obs_arr), state_vec.astype(np.float32), action_list, float(r), sanitize(next_obs_arr), state_vec.astype(np.float32), done_flag))
+
+                # when buffer >= N_STEP, create n-step transition
+                if len(nstep_buffers[env_i]) >= N_STEP:
+                    ret_r = 0.0
+                    for idx in range(N_STEP):
+                        ret_r += (GAMMA ** idx) * nstep_buffers[env_i][idx][3]
+                    obs0, state0, acts0 = nstep_buffers[env_i][0][0], nstep_buffers[env_i][0][1], nstep_buffers[env_i][0][2]
+                    next_obs_n, next_state_n, done_n = nstep_buffers[env_i][-1][4], nstep_buffers[env_i][-1][5], nstep_buffers[env_i][-1][6]
+                    replay.push(obs0, state0, acts0, ret_r, next_obs_n, next_state_n, float(done_n))
+                    nstep_buffers[env_i].popleft()
 
                 steps_collected += 1
-                total_steps += 1
-                if steps_collected >= steps_needed:
-                    break
+                total_frames += 1
 
-        # switch optimizer when unfreezing agents
-        if use_mixer_only and epoch == MIXER_ONLY_EPOCHS + 1:
-            for net in agent_nets:
-                for p in net.parameters():
-                    p.requires_grad = True
+                # if episode ended flush remaining n-step entries
+                if done_flag:
+                    while nstep_buffers[env_i]:
+                        L = len(nstep_buffers[env_i])
+                        ret_r = 0.0
+                        for idx in range(L):
+                            ret_r += (GAMMA ** idx) * nstep_buffers[env_i][idx][3]
+                        obs0, state0, acts0 = nstep_buffers[env_i][0][0], nstep_buffers[env_i][0][1], nstep_buffers[env_i][0][2]
+                        next_obs_n, next_state_n, done_n = nstep_buffers[env_i][-1][4], nstep_buffers[env_i][-1][5], nstep_buffers[env_i][-1][6]
+                        replay.push(obs0, state0, acts0, ret_r, next_obs_n, next_state_n, float(done_n))
+                        nstep_buffers[env_i].popleft()
+
+                # update current env state
+                env_states[env_i] = next_obs_arr
+
+        # end collection loop
+
+        # if mixer-only curriculum ends now, unfreeze agents
+        if use_mixer_only and epoch == (MIXER_ONLY_EPOCHS + 1):
+            print("Unfreezing agents and optimizing agents + mixer now.")
             optimizer = torch.optim.Adam(agent_params + mixer_params, lr=LR)
             scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
             use_mixer_only = False
-            print("Unfroze agents; optimizer now updates agents + mixer")
 
-        # TRAIN: perform gradient updates
-        if len(buffer) >= MIN_REPLAY_SIZE:
+        # Training updates
+        if len(replay) >= MIN_REPLAY_SIZE:
             n_updates = max(1, int(STEPS_PER_EPOCH * 0.1))
             total_loss = 0.0
             for _ in range(n_updates):
-                beta = beta_by_frame(total_steps)
-                batch = buffer.sample(BATCH_SIZE, beta=beta)
-                # convert to device tensors
-                obs_b = torch.tensor(batch["obs"], device=device)            # (B, n_agents, obs_dim)
-                state_b = torch.tensor(batch["state"], device=device)        # (B, state_dim)
-                actions_b = torch.tensor(batch["actions"], device=device)    # (B, n_agents) absolute replicas
-                rewards_b = torch.tensor(batch["rewards"], device=device)    # (B,)
-                next_obs_b = torch.tensor(batch["next_obs"], device=device)
-                next_state_b = torch.tensor(batch["next_state"], device=device)
-                dones_b = torch.tensor(batch["dones"], device=device)
-                weights_b = torch.tensor(batch["weights"], device=device)
+                beta = beta_by_frame(total_frames)
+                batch = replay.sample(BATCH_SIZE, beta=beta)
+
+                # move to device
+                obs_b = torch.tensor(batch["obs"], dtype=torch.float32, device=device)
+                state_b = torch.tensor(batch["state"], dtype=torch.float32, device=device)
+                actions_b = torch.tensor(batch["actions"], dtype=torch.long, device=device)
+                rewards_b = torch.tensor(batch["rewards"], dtype=torch.float32, device=device)
+                next_obs_b = torch.tensor(batch["next_obs"], dtype=torch.float32, device=device)
+                next_state_b = torch.tensor(batch["next_state"], dtype=torch.float32, device=device)
+                dones_b = torch.tensor(batch["dones"], dtype=torch.float32, device=device)
+                weights_b = torch.tensor(batch["weights"], dtype=torch.float32, device=device)
                 indices = batch["indices"]
 
                 B = obs_b.size(0)
 
-                # per-agent Q of taken actions: first compute action indices (map absolute replicas back to delta index)
-                # Need agent q-values for each action candidate (delta). We'll compute q_i for each agent for obs.
+                # Q(s,a) for taken actions
                 agent_qs_taken = []
-                for i in range(n_agents):
+                for i in range(n_agents := len(agent_ids)):
                     obs_i = obs_b[:, i, :]
-                    q_i = agent_nets[i](obs_i)      # (B, N_DELTAS)
-                    # compute index of delta that was chosen: based on previous replicas stored in obs vector (field idx 9)
-                    # prev_replicas in obs = obs[:,9] * MAX_REPLICAS
-                    prev_replicas = torch.clamp((obs_i[:, 9] * MAX_REPLICAS).round().long(), MIN_REPLICAS, MAX_REPLICAS)
-                    # actions_b stores absolute desired replicas (1..20). delta = desired - prev
-                    desired = actions_b[:, i].long()
-                    delta = desired - prev_replicas
-                    # map delta to delta index
-                    # compute index by finding where DELTA_ACTIONS == delta (vectorized)
-                    # create a mapping dict on CPU
-                    delta_idx = []
-                    delta_cpu = delta.detach().cpu().numpy()
-                    # map each element
-                    for val in delta_cpu:
-                        # clamp val to DELTA_ACTIONS range
-                        if val in DELTA_ACTIONS:
-                            idx = int(np.where(DELTA_ACTIONS == val)[0][0])
-                        else:
-                            # if out of range (shouldn't), clip to nearest
-                            diffs = np.abs(DELTA_ACTIONS - val)
-                            idx = int(diffs.argmin())
-                        delta_idx.append(idx)
-                    idx_t = torch.tensor(delta_idx, dtype=torch.long, device=device).unsqueeze(1)  # (B,1)
-                    q_taken = q_i.gather(1, idx_t).squeeze(1)  # (B,)
+                    q_i = agent_nets[i](obs_i)            # (B, ACTION_DIM)
+                    a_i = actions_b[:, i].unsqueeze(1)    # (B,1)
+                    q_taken = q_i.gather(1, a_i).squeeze(1)  # (B,)
                     agent_qs_taken.append(q_taken)
                 agent_qs_taken = torch.stack(agent_qs_taken, dim=1)  # (B, n_agents)
 
-                # Double-DQN n-step target: use online argmax on next_obs, evaluate with target nets
+                # Double DQN: online argmax, target evaluation
                 with torch.no_grad():
                     agent_qs_next_online = []
                     for i in range(n_agents):
-                        q_online_next = agent_nets[i](next_obs_b[:, i, :])  # (B, N_DELTAS)
-                        agent_qs_next_online.append(q_online_next)
-                    next_actions_idx = [q.argmax(dim=1) for q in agent_qs_next_online]  # list of (B,)
+                        next_obs_i = next_obs_b[:, i, :]
+                        q_online = agent_nets[i](next_obs_i)
+                        agent_qs_next_online.append(q_online)
+                    next_actions = [q.argmax(dim=1) for q in agent_qs_next_online]  # list of (B,)
                     agent_qs_next_eval = []
                     for i in range(n_agents):
-                        q_target_next = target_agent_nets[i](next_obs_b[:, i, :])  # (B, N_DELTAS)
-                        ai = next_actions_idx[i].unsqueeze(1)
-                        q_eval = q_target_next.gather(1, ai).squeeze(1)
+                        q_target_next = target_agent_nets[i](next_obs_b[:, i, :])
+                        a_i = next_actions[i].unsqueeze(1)
+                        q_eval = q_target_next.gather(1, a_i).squeeze(1)
                         agent_qs_next_eval.append(q_eval)
                     agent_qs_next_eval = torch.stack(agent_qs_next_eval, dim=1)  # (B, n_agents)
                     q_tot_next = target_mixer(agent_qs_next_eval, next_state_b).squeeze(1)
                     td_target = rewards_b + (1.0 - dones_b) * (GAMMA ** N_STEP) * q_tot_next
                     td_target = torch.clamp(td_target, -TD_CLIP, TD_CLIP)
 
-                q_tot = mixer(agent_qs_taken, state_b).squeeze(1)  # (B,)
-                # per-sample absolute TD for priority update
-                per_sample_abs = (q_tot - td_target).abs().detach().cpu().numpy()
-                # weighted MSE
+                q_tot = mixer(agent_qs_taken, state_b).squeeze(1)
+                # per-sample TD errors for priorities
+                td_errors = (q_tot - td_target).detach().abs().cpu().numpy()
+                # weighted MSE loss
                 loss = (weights_b * F.mse_loss(q_tot, td_target, reduction='none')).mean()
 
                 optimizer.zero_grad()
                 loss.backward()
                 if GRAD_CLIP is not None:
-                    torch.nn.utils.clip_grad_norm_(list(mixer.parameters()) + agent_params, GRAD_CLIP)
+                    torch.nn.utils.clip_grad_norm_(agent_params + mixer_params, GRAD_CLIP)
                 optimizer.step()
                 scheduler.step()
 
                 total_loss += float(loss.item())
-                gradient_steps += 1
+                grad_steps += 1
 
-                # update priorities
-                new_prios = per_sample_abs + 1e-6
-                buffer.update_priorities(indices, new_prios)
-
-                if gradient_steps % TARGET_UPDATE_FREQ == 0:
+                if grad_steps % TARGET_UPDATE_FREQ == 0:
                     for tnet, net in zip(target_agent_nets, agent_nets):
                         tnet.load_state_dict(net.state_dict())
                     target_mixer.load_state_dict(mixer.state_dict())
+
+                # update replay priorities
+                new_prios = td_errors + 1e-6
+                replay.update_priorities(indices, new_prios)
+
             avg_loss = total_loss / max(1, n_updates)
         else:
             avg_loss = 0.0
 
         epoch_time = time.time() - epoch_start
 
-        # EVALUATION (greedy)
+        # Periodic evaluation (greedy)
         if epoch % 5 == 0 or epoch == EPOCHS:
-            eval_episodes = 5
+            eval_eps = 5
             eval_rewards = []
-            last_actions = None
-            for _e in range(eval_episodes):
-                obs_dicts, states = venv.reset()  # start fresh
-                obs_dict = obs_dicts[0]  # take first env for logging
-                state = states[0]
+            last_actions_repr = None
+            for _e in range(eval_eps):
+                env_eval = K8sAutoscaleEnv(ENV_CONFIG)
+                obs_dict, _ = env_eval.reset()
                 obs_arr = np.stack([obs_dict[a] for a in agent_ids], axis=0).astype(np.float32)
                 done = False
                 total_r = 0.0
-                prev_reps = [int(round(obs_arr[i,9] * MAX_REPLICAS)) for i in range(n_agents)]
                 while not done:
                     actions = {}
-                    actions_delta = {}
                     for i, aid in enumerate(agent_ids):
                         obs_i = torch.tensor(obs_arr[i:i+1], dtype=torch.float32, device=device)
                         with torch.no_grad():
-                            qvals = agent_nets[i](obs_i)
-                            ai = int(qvals.argmax(dim=1).item())
-                            delta = int(DELTA_ACTIONS[ai])
-                        desired = clamp_replicas(prev_reps[i], delta)
-                        actions[aid] = int(desired)
-                        actions_delta[aid] = delta
-                        prev_reps[i] = desired
-                    next_obs_dicts, rewards, terms, truns, infos, states = venv.step([actions])
-                    # single env step returns list; extract index 0
-                    next_obs = next_obs_dicts[0]
-                    reward_raw = rewards[0] if not isinstance(rewards, list) else rewards[0]
-                    if isinstance(reward_raw, dict):
-                        r = float(list(reward_raw.values())[0])
-                    else:
-                        r = float(reward_raw)
+                            q = agent_nets[i](obs_i)
+                        act = int(q.argmax(dim=1).item())
+                        actions[aid] = act
+                    next_obs_dict, rewards, terminateds, truncateds, infos = env_eval.step(actions)
+                    r = float(list(rewards.values())[0]) if isinstance(rewards, dict) else float(rewards)
                     total_r += float(np.clip(r / REWARD_SCALE, -REWARD_CLIP, REWARD_CLIP))
-                    obs_arr = np.stack([next_obs[a] for a in agent_ids], axis=0).astype(np.float32)
-                    done = any(terms[0].values()) if isinstance(terms[0], dict) else bool(terms[0])
-                    last_actions = actions.copy()
+                    obs_arr = np.stack([next_obs_dict[a] for a in agent_ids], axis=0).astype(np.float32)
+                    done = any(terminateds.values()) if isinstance(terminateds, dict) else bool(terminateds)
                 eval_rewards.append(total_r)
+                last_actions_repr = {aid: (int(actions[aid]) + 1) for aid in agent_ids}
+
             mean_eval = float(np.mean(eval_rewards))
             std_eval = float(np.std(eval_rewards))
-            lr_now = scheduler.get_last_lr()[0] if hasattr(scheduler, "get_last_lr") else 0.0
-            print(f"[Epoch {epoch:03d} | {epoch_time:.1f}s] eval={mean_eval:.2f}±{std_eval:.2f} | buffer={len(buffer)} | loss={avg_loss:.4f} | lr={lr_now:.2e}")
+            print(f"[Epoch {epoch:03d} | {epoch_time:.1f}s] eval={mean_eval:.2f}±{std_eval:.2f} | buffer={len(replay)} | loss={avg_loss:.4f}")
 
             if mean_eval > best_eval:
-                print("=== New best eval! ===")
-                # Show previous best actions vs current greedy (convert to replicas)
-                if prev_best_actions is None:
-                    print("Prev actions: (none)")
-                else:
+                print("=== New best eval found ===")
+                if prev_best_actions:
                     print("Prev best actions (replicas):")
                     for aid in agent_ids:
                         print(f"  {aid}: {prev_best_actions.get(aid, 'N/A')}")
-                current_actions = {}
-                if last_actions is not None:
-                    for aid in agent_ids:
-                        current_actions[aid] = last_actions.get(aid, 'N/A')
+                else:
+                    print("Prev best actions: (none)")
                 print("Current greedy actions (replicas):")
                 for aid in agent_ids:
-                    print(f"  {aid}: {current_actions.get(aid, 'N/A')}")
-                prev_best_actions = current_actions.copy()
-
+                    print(f"  {aid}: {last_actions_repr.get(aid, 'N/A')}")
+                prev_best_actions = last_actions_repr.copy()
                 best_eval = mean_eval
-                save_data = {
+
+                # Save joint + per-agent snapshots
+                save_dict = {
                     "agent_nets": [net.state_dict() for net in agent_nets],
                     "mixer": mixer.state_dict(),
                     "epoch": epoch,
-                    "eval": mean_eval,
+                    "eval": mean_eval
                 }
-                # per-agent save
                 for i, aid in enumerate(agent_ids):
-                    save_data[f"agent_{aid}"] = agent_nets[i].state_dict()
-                    torch.save(agent_nets[i].state_dict(), os.path.join(DQN_AGENT_DIR, f"{aid}_best.pth"))
-                torch.save(save_data, os.path.join(SAVE_DIR, "qmix_best.pth"))
-                print(f"Saved best QMIX checkpoint to {os.path.join(SAVE_DIR, 'qmix_best.pth')} (eval={mean_eval:.2f})")
+                    save_dict[f"agent_{aid}"] = agent_nets[i].state_dict()
+                    torch.save(agent_nets[i].state_dict(), os.path.join(DQN_SAVE_DIR, f"{aid}_best.pth"))
+                torch.save(save_dict, os.path.join(SAVE_DIR, "qmix_best.pth"))
+                print(f"Saved best QMIX checkpoint to {os.path.join(SAVE_DIR, 'qmix_best.pth')}")
 
-        # periodic logging
         if epoch % 10 == 0:
-            print(f"Epoch {epoch}/{EPOCHS} done in {epoch_time:.1f}s | avg_loss={avg_loss:.4f} | buffer={len(buffer)}")
+            print(f"Epoch {epoch}/{EPOCHS} completed in {epoch_time:.1f}s | avg_loss={avg_loss:.4f} | buffer={len(replay)}")
 
     # final save
-    final = {
+    final_save = {
         "agent_nets": [net.state_dict() for net in agent_nets],
-        "mixer": mixer.state_dict(),
+        "mixer": mixer.state_dict()
     }
     for i, aid in enumerate(agent_ids):
-        final[f"agent_{aid}"] = agent_nets[i].state_dict()
-    torch.save(final, os.path.join(SAVE_DIR, "qmix_final.pth"))
-    print("Training complete. Final saved to:", os.path.join(SAVE_DIR, "qmix_final.pth"))
-    venv.close()
+        final_save[f"agent_{aid}"] = agent_nets[i].state_dict()
+    torch.save(final_save, os.path.join(SAVE_DIR, "qmix_final.pth"))
+    print("Training finished. Final saved to:", os.path.join(SAVE_DIR, "qmix_final.pth"))
+    vec_env.close()
 
 if __name__ == "__main__":
     main()
