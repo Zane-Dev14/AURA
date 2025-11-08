@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 import sys, os
-import json  # Added for JSON export
-import time  # Added for timestamped filename
+import json
+import time
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from boutique_env import K8sAutoscaleEnv
@@ -33,44 +33,44 @@ class QNetwork(nn.Module):
 # HPA Policy (K8s Horizontal Pod Autoscaler baseline)
 # =====================================================
 class HPAPolicy:
-    """
-    Mimics Kubernetes HPA behavior.
-    Only uses CPU utilization (like real HPA) for fair comparison.
-    """
-    def __init__(self, target_cpu=0.7, scale_up_threshold=0.8, scale_down_threshold=0.5):
+    def __init__(self, target_cpu=0.7, tolerance=0.1,
+                 scale_down_stabilization=5*60,  # seconds
+                 max_up_step=2, max_down_step=1,
+                 min_replicas=1, max_replicas=10):
         self.target_cpu = target_cpu
-        self.scale_up_threshold = scale_up_threshold
-        self.scale_down_threshold = scale_down_threshold
-        self.last_actions = {}
-        
+        self.tolerance = tolerance
+        self.scale_down_stabilization = scale_down_stabilization
+        self.max_up_step = max_up_step
+        self.max_down_step = max_down_step
+        self.min_replicas = min_replicas
+        self.max_replicas = max_replicas
+        self.history = {}
+    
     def get_actions(self, observations):
+        now = time.time()
         actions = {}
-        
         for agent, obs in observations.items():
-            # obs[0] is cpu_util normalized (divided by 2.0 in simulator)
-            cpu_util = obs[0] * 2.0  # Denormalize
+            cpu_util = obs[0] * 2.0
+            current = int(obs[9] * 20.0)
+            desired = self.history.get(agent, (now, current))[1]
+
+            ratio = cpu_util / self.target_cpu
+            if abs(ratio - 1.0) < self.tolerance:
+                # Within tolerance, do nothing
+                actions[agent] = current - 1
+                continue
             
-            # obs[9] is replicas_desired / 20.0
-            current_replicas = int(obs[9] * 20.0)
-            
-            if agent not in self.last_actions:
-                self.last_actions[agent] = max(1, current_replicas)
-            
-            desired = self.last_actions[agent]
-            
-            # HPA logic: scale based on CPU only
-            if cpu_util > self.scale_up_threshold:
-                if cpu_util > 1.2:
-                    desired = min(desired + 2, 10)
-                else:
-                    desired = min(desired + 1, 10)
-            elif cpu_util < self.scale_down_threshold:
-                desired = max(desired - 1, 1)
-            
-            # Convert to action space (0-9)
-            actions[agent] = max(0, min(desired - 1, 9))
-            self.last_actions[agent] = desired
-            
+            raw_desired = int(np.ceil(current * ratio))
+            raw_desired = np.clip(raw_desired, self.min_replicas, self.max_replicas)
+
+            # Stabilization: don’t scale down too fast
+            last_t, last_desired = self.history.get(agent, (now, current))
+            if raw_desired < desired and (now - last_t) < self.scale_down_stabilization:
+                raw_desired = desired  # skip scale-down
+
+            raw_desired = int(np.clip(raw_desired, self.min_replicas, self.max_replicas))
+            actions[agent] = raw_desired - 1
+            self.history[agent] = (now, raw_desired)
         return actions
 
 
@@ -102,7 +102,6 @@ def load_all_agents():
     agents = ["api", "app", "db"]
     models = {}
     
-    # Check if the directory exists
     base_path = "../trained_agents"
     if not os.path.exists(base_path):
         print(f"⚠️  Could not find directory: {base_path}. Skipping Per-Agent DQN.")
@@ -118,7 +117,6 @@ def load_all_agents():
             print(f"✅ Loaded {agent} from {path}")
         except Exception as e:
             print(f"⚠️  Could not load {agent} from {path}: {e}")
-            # If any agent is missing, we can't run the full "Per-Agent" policy
             print("⚠️  Skipping Per-Agent DQN test as not all models are present.")
             return None
     
@@ -126,37 +124,35 @@ def load_all_agents():
 
 
 def load_qmix():
-    """Load QMIX trained models from the 'qmix_trained' directory"""
-    agents = ["api", "app", "db"]  # Or all agents from your env
-    models = {}
-    base_path = "../qmix_trained"
-    
-    if not os.path.exists(base_path):
-        print(f"⚠️  Could not find directory: {base_path}. Skipping QMIX.")
+    """Load QMIX trained models from simulator/qmix_checkpoints/qmix_final.pth"""
+    qmix_path = os.path.join("..", "qmix_checkpoints", "qmix_final.pth")
+
+    if not os.path.exists(qmix_path):
+        print(f"⚠️  QMIX checkpoint not found at {qmix_path}")
         return None
 
     try:
-        for agent in agents:
-            # Correct path based on your 'ls' output
-            path = f"{base_path}/{agent}_actor_best.pth" 
-            
-            if not os.path.exists(path):
-                print(f"⚠️  Missing QMIX file for agent: {agent} at {path}")
-                print("⚠️  Skipping QMIX test as not all models are present.")
-                return None # Fail if any agent is missing
+        checkpoint = torch.load(qmix_path, map_location="cpu")
 
+        # Load agent networks (stored as list)
+        agent_nets_state = checkpoint.get("agent_nets", None)
+        if agent_nets_state is None:
+            print("⚠️  No agent_nets found in checkpoint.")
+            return None
+
+        agents = ["api", "app", "db"]
+        models = {}
+        for i, agent in enumerate(agents):
             model = QNetwork().to("cpu")
-            
-            # Load the state dict directly from the individual file
-            model.load_state_dict(torch.load(path, map_location="cpu"))
+            model.load_state_dict(agent_nets_state[i])
             model.eval()
             models[agent] = model
-        
-        print(f"✅ Loaded QMIX models from ../qmix_trained/")
+
+        print(f"✅ Loaded QMIX joint checkpoint from {qmix_path}")
         return models
-        
+
     except Exception as e:
-        print(f"⚠️  Could not load QMIX models: {e}")
+        print(f"⚠️  Could not load QMIX checkpoint: {e}")
         return None
 
 
@@ -164,7 +160,6 @@ def agent_actions(models, observations):
     """Get actions from trained model(s)"""
     actions = {}
     
-    # Handle single model case
     if isinstance(models, nn.Module):
         for agent, obs in observations.items():
             obs_t = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
@@ -172,7 +167,6 @@ def agent_actions(models, observations):
                 logits = models(obs_t)
                 action = torch.argmax(logits, dim=1).item()
             actions[agent] = action
-    # Handle multi-agent dict case
     else:
         for agent, obs in observations.items():
             if agent in models:
@@ -182,8 +176,7 @@ def agent_actions(models, observations):
                     action = torch.argmax(logits, dim=1).item()
                 actions[agent] = action
             else:
-                # Fallback for missing agents (e.g., if only 'api' is loaded)
-                actions[agent] = 2  # default 3 replicas
+                actions[agent] = 2
     
     return actions
 
@@ -216,13 +209,18 @@ def run_episode(title, policy_fn, policy_obj=None, seed=0, verbose=False):
         else:
             actions = policy_fn(policy_obj, observations)
 
+        # --- VERBOSE PRINTING ---
+        if verbose:
+            # Actions are 0-9, so +1 for replicas 1-10
+            action_replicas = {a: act + 1 for a, act in actions.items()}
+            print(f"\n--- Step {step:03d} ---")
+            print(f"  Actions Taken: {action_replicas}")
+
         observations, rewards, terminateds, truncateds, infos = env.step(actions)
 
-        # Use the reward for the first agent as the shared global reward
         reward = list(rewards.values())[0]
         done = list(terminateds.values())[0]
 
-        # Extract metrics from the info dict of the first agent
         first_agent = list(infos.keys())[0]
         sim_info = infos[first_agent]
 
@@ -230,26 +228,25 @@ def run_episode(title, policy_fn, policy_obj=None, seed=0, verbose=False):
         total_cost += sim_info['total_cost']
         total_sla_violations += sim_info['sla_violations']
         
-        # Collect latencies from all services at this step
         for svc, m in sim_info['metrics'].items():
             latencies.append(m['p95_ms'])
 
         if verbose:
-            print(f"Step {step:03d}: Reward={reward:.3f}  "
-                  f"SLA={sim_info['sla_violations']}  "
-                  f"Cost={sim_info['total_cost']:.4f}")
-
-            if step % 10 == 0:
-                print("--- Metrics snapshot ---")
-                for name, m in sim_info["metrics"].items():
-                    print(f"  {name}: p95={m['p95_ms']:.0f}ms "
-                          f"ready={m['ready_replicas']}/{m['desired_replicas']} "
-                          f"queue={m['queue']:.1f}")
-                print()
-
+            print(f"  Reward this step: {reward:.3f}")
+            print(f"  SLA Violations this step: {sim_info['sla_violations']}")
+            print("  --- Metrics Snapshot ---")
+            for name, m in sim_info["metrics"].items():
+                print(f"    {name:<10}: "
+                      f"P95={m['p95_ms']:.0f}ms, "
+                      f"Ready={m['ready_replicas']}/{m['desired_replicas']}, "
+                      f"Queue={m['queue']:.1f}, "
+                      f"CPU={(observations[name][0] * 2.0):.2f}") # De-normalize CPU
+            
     avg_latency = np.mean(latencies) if latencies else 0
     
-    print(f"\n📊 Episode Summary:")
+    print(f"\n{'='*70}")
+    print(f"📊 EPISODE SUMMARY: {title}")
+    print(f"{'='*70}")
     print(f"   Total Reward: {total_reward:.2f}")
     print(f"   Total Cost: ${total_cost:.4f}")
     print(f"   SLA Violations: {total_sla_violations}")
@@ -272,11 +269,9 @@ def run_multiple_episodes(title, policy_fn, policy_obj=None, n_episodes=5):
     results = []
     for ep in range(n_episodes):
         print(f"\n--- Episode {ep+1}/{n_episodes} ---")
-        # Use a different seed for each episode for robust evaluation
         result = run_episode(f"{title} (ep {ep+1})", policy_fn, policy_obj, seed=ep, verbose=False)
         results.append(result)
     
-    # Aggregate
     rewards = [r["reward"] for r in results]
     costs = [r["cost"] for r in results]
     slas = [r["sla_violations"] for r in results]
@@ -314,7 +309,7 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Test and compare autoscaling policies")
-    parser.add_argument("--mode", type=str, default="all", 
+    parser.add_argument("--mode", type=str, default="single",  # <-- CHANGED DEFAULT
                        choices=["single", "compare", "all"],
                        help="single: run one episode; compare: compare all policies; all: detailed multi-episode comparison")
     parser.add_argument("--episodes", type=int, default=10,
@@ -323,25 +318,34 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     if args.mode == "single":
-        # ---------- SINGLE EPISODE MODE ----------
+        # ---------- SINGLE EPISODE MODE (VERBOSE) ----------
         print("\n" + "="*70)
-        print("SINGLE EPISODE MODE")
+        print("SINGLE EPISODE VERBOSE COMPARISON")
         print("="*70)
         
         # Run HPA
         hpa = HPAPolicy()
         run_episode("HPA (K8s Horizontal Pod Autoscaler)", hpa_actions, hpa, seed=0, verbose=True)
         
+        # Run Per-Agent DQN (The Winner)
+        all_agents = load_all_agents()
+        if all_agents:
+            run_episode("Per-Agent DQN (The Winner)", agent_actions, all_agents, seed=0, verbose=True)
+        else:
+            print("\nSkipping Per-Agent DQN (models not found in ../trained_agents/).")
+            
         # Run QMIX
         qmix = load_qmix()
         if qmix:
             run_episode("QMIX", agent_actions, qmix, seed=0, verbose=True)
         else:
-            print("\nSkipping QMIX (models not found).")
+            print("\nSkipping QMIX (models not found in ../qmix_trained/).")
             
     
     elif args.mode == "compare":
         # ---------- QUICK COMPARISON MODE (1 episode each) ----------
+        # ... (no changes here) ...
+        
         print("\n" + "="*70)
         print("QUICK COMPARISON MODE (1 episode each)")
         print("="*70)
@@ -379,6 +383,8 @@ if __name__ == "__main__":
     
     else:  # args.mode == "all"
         # ---------- COMPREHENSIVE COMPARISON MODE ----------
+        # ... (no changes here) ...
+        
         print("\n" + "="*70)
         print(f"COMPREHENSIVE COMPARISON ({args.episodes} episodes each)")
         print("="*70)
@@ -440,16 +446,17 @@ if __name__ == "__main__":
         filename = f"evaluation_results_{timestamp}.json"
         
         # Convert numpy arrays to lists for JSON serialization
-        for policy, stats in all_results.items():
-            for key, value in stats.items():
-                if isinstance(value, np.ndarray):
-                    stats[key] = value.tolist()
-        
-        try:
-            with open(filename, 'w') as f:
-                json.dump(all_results, f, indent=4)
-            print("\n" + "="*80)
-            print(f"✅ Successfully saved detailed results to {filename}")
-            print("="*80)
-        except Exception as e:
-            print(f"\n⚠️  Failed to save results to JSON: {e}")
+        if all_results: # Only save if we ran this mode
+            for policy, stats in all_results.items():
+                for key, value in stats.items():
+                    if isinstance(value, np.ndarray):
+                        stats[key] = value.tolist()
+            
+            try:
+                with open(filename, 'w') as f:
+                    json.dump(all_results, f, indent=4)
+                print("\n" + "="*80)
+                print(f"✅ Successfully saved detailed results to {filename}")
+                print("="*80)
+            except Exception as e:
+                print(f"\n⚠️  Failed to save results to JSON: {e}")

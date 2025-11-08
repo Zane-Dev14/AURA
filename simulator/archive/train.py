@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 """
-train.py (Final Upgraded Version)
+train_v4_GPU_masking.py
 
-Features:
-- Warm-start from previous model even with architecture changes.
-- Larger neural network (256-256-128).
-- GELU activations.
-- Weighted Loss for class imbalance.
-- LR Scheduler.
-- Validation split.
-- Smarter leak-masking.
-- Mixed precision support.
-- GPU cooldown every 30 epochs.
+This version fixes the major CPU bottleneck from v3.
+
+--- FASTER UPGRADES ---
+- CRITICAL FIX: Removed obs.copy() from __getitem__.
+- Masking is now performed on the GPU on the entire batch at once.
+- Removed unnecessary time.sleep() (GPU cooldown).
+- Increased BATCH_SIZE to 8192 for better GPU utilization.
 """
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -25,7 +21,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # ============================================================
-# 1. IMPROVED Q-Network
+# 1. IMPROVED Q-Network (Same as before)
 # ============================================================
 
 class QNetwork(nn.Module):
@@ -50,7 +46,7 @@ class QNetwork(nn.Module):
 
 
 # ============================================================
-# 2. Custom Dataset With Smart Leak-Masking
+# 2. Custom Dataset (FAST VERSION)
 # ============================================================
 
 class AlibabaDataset(Dataset):
@@ -68,26 +64,14 @@ class AlibabaDataset(Dataset):
         return len(self.actions)
 
     def __getitem__(self, idx):
-        obs = self.observations[idx]
-        action = self.actions[idx]
-
-        # SMART masking:
-        # Remove *replica information*, but *cap rps* instead of zeroing it.
-        obs_copy = obs.copy()
-
-        # Cap RPS at 0.4 to prevent cheating but keep useful signal
-        obs_copy[5] = min(obs_copy[5], 0.4)
-
-        # Remove replica count features entirely (those leak the label)
-        obs_copy[9] = 0.0
-        obs_copy[10] = 0.0
-        obs_copy[11] = 0.0
-
-        return obs_copy, action
+        # --- FIX ---
+        # Return the raw data directly. This is extremely fast.
+        # Masking will be done on the GPU in the training loop.
+        return self.observations[idx], self.actions[idx]
 
 
 # ============================================================
-# 3. Warm Start Loader (Load old 128-128 weights safely)
+# 3. Warm Start Loader (Same as before)
 # ============================================================
 
 def warm_start_load(new_model, old_checkpoint_path):
@@ -112,14 +96,22 @@ def warm_start_load(new_model, old_checkpoint_path):
 
 
 # ============================================================
-# 4. Weighted Loss Helper
+# 4. Weighted Loss Helper (Same as before)
 # ============================================================
 
 def compute_class_weights(dataset, num_classes=10):
     counts = np.zeros(num_classes, dtype=np.int64)
     for a in dataset.actions:
         counts[a] += 1
-    weights = 1.0 / np.maximum(counts, 1)
+    
+    # Handle classes with 0 samples to avoid division by zero
+    counts_safe = np.maximum(counts, 1)
+    weights = 1.0 / counts_safe
+    
+    # Set weight to 0 for classes that never appear
+    weights[counts == 0] = 0
+    
+    # Normalize
     weights = weights / weights.sum()
     return torch.tensor(weights, dtype=torch.float32)
 
@@ -135,13 +127,17 @@ if __name__ == "__main__":
     # -----------------------------
     DATASET_PATH   = "alibaba_dataset_large.pkl"
     CHECKPOINT_OLD = "alibaba_clone_agent_v2.pth"   # warm start
-    CHECKPOINT_NEW = "alibaba_clone_agent_v3.pth"
+    CHECKPOINT_NEW = "alibaba_clone_agent_v4.pth"   # <-- New output file
 
     OBS_DIM    = 16
     ACTION_DIM = 10
 
-    BATCH_SIZE = 2048
-    EPOCHS     = 120        # longer training
+    # --- FASTER CONFIG ---
+    BATCH_SIZE = 8192       # Even larger batch for better GPU saturation
+    EPOCHS     = 120        # Max epochs
+    EARLY_STOP_PATIENCE = 15  # Stop if no improvement after 15 epochs
+    # ---
+    
     LR         = 1e-4
     VALIDATION_SPLIT = 0.1
 
@@ -162,8 +158,22 @@ if __name__ == "__main__":
     print(f"Training samples: {len(train_dataset)}")
     print(f"Validation samples: {len(val_dataset)}")
 
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
-    val_loader   = DataLoader(val_dataset,   batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
+    # --- FASTER DATALOADERS ---
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True  # Speeds up CPU-to-GPU transfer
+    )
+    val_loader   = DataLoader(
+        val_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True  # Speeds up CPU-to-GPU transfer
+    )
+    # ---
 
     # -----------------------------
     # Build Model
@@ -187,14 +197,28 @@ if __name__ == "__main__":
     print("🔥 Starting upgraded training...")
 
     best_val_accuracy = 0.0
+    epochs_no_improve = 0  # Counter for early stopping
+    start_time = time.time()
 
     for epoch in range(1, EPOCHS + 1):
+        epoch_start_time = time.time()
         model.train()
         total_train_loss = 0
 
         for batch_obs, batch_actions in train_loader:
             batch_obs = batch_obs.to(device)
             batch_actions = batch_actions.to(device)
+
+            # --- FIX: GPU-SIDE MASKING ---
+            # This is done on the entire batch at once, very fast.
+            
+            # Cap RPS at 0.4
+            batch_obs[:, 5] = torch.clamp(batch_obs[:, 5], max=0.4)
+            # Zero out replica features
+            batch_obs[:, 9] = 0.0
+            batch_obs[:, 10] = 0.0
+            batch_obs[:, 11] = 0.0
+            # ---
 
             optimizer.zero_grad()
 
@@ -224,6 +248,13 @@ if __name__ == "__main__":
                 batch_obs = batch_obs.to(device)
                 batch_actions = batch_actions.to(device)
 
+                # --- FIX: GPU-SIDE MASKING (MUST BE IDENTICAL TO TRAIN) ---
+                batch_obs[:, 5] = torch.clamp(batch_obs[:, 5], max=0.4)
+                batch_obs[:, 9] = 0.0
+                batch_obs[:, 10] = 0.0
+                batch_obs[:, 11] = 0.0
+                # ---
+
                 with torch.cuda.amp.autocast():
                     logits = model(batch_obs)
                     loss   = criterion(logits, batch_actions)
@@ -236,25 +267,36 @@ if __name__ == "__main__":
 
         avg_val_loss = total_val_loss / len(val_loader)
         val_accuracy = 100 * correct / total
-
+        
         scheduler.step()
+        epoch_time = time.time() - epoch_start_time
 
-        print(f"Epoch {epoch}/{EPOCHS} --- "
+        print(f"Epoch {epoch}/{EPOCHS} [{epoch_time:.2f}s] --- "
               f"Train Loss: {avg_train_loss:.5f} | "
               f"Val Loss: {avg_val_loss:.5f} | "
               f"Val Acc: {val_accuracy:.2f}%")
 
-        # Save best model
+        # --- EARLY STOPPING LOGIC ---
         if val_accuracy > best_val_accuracy:
             best_val_accuracy = val_accuracy
             torch.save(model.state_dict(), CHECKPOINT_NEW)
             print(f"  ✅ New best model saved! Acc = {val_accuracy:.2f}%")
+            epochs_no_improve = 0  # Reset counter
+        else:
+            epochs_no_improve += 1 # Increment counter
+            print(f"  (No improvement for {epochs_no_improve} epoch(s))")
 
-        # GPU cooldown every 30 epochs
-        if epoch % 30 == 0:
-            print("🧊 Cooling GPU for 20 seconds...")
-            time.sleep(20)
+        if epochs_no_improve >= EARLY_STOP_PATIENCE:
+            print(f"⚠️  Early stopping! No improvement in {EARLY_STOP_PATIENCE} epochs.")
+            break
+        # ---
 
-    print("\n✅ Training complete!")
+        # --- FIX: REMOVED UNNECESSARY GPU COOLDOWN ---
+        # if epoch % 30 == 0:
+        #     print("🧊 Cooling GPU for 20 seconds...")
+        #     time.sleep(20)
+
+    total_training_time = time.time() - start_time
+    print(f"\n✅ Training complete in {total_training_time / 60:.2f} minutes!")
     print(f"Best validation accuracy: {best_val_accuracy:.2f}%")
     print(f"Saved model: {CHECKPOINT_NEW}")

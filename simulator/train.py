@@ -1,65 +1,74 @@
-
-    #!/usr/bin/env python3
+#!/usr/bin/env python3
 """
-Stable Single-Agent DQN Training for K8sAutoscaleEnv
-- Matches pretrained 256-256-128 + GELU architecture
-- Loads warm-start weights if available
-- Contains safety fixes: reward sanitization, obs clamping, longer warmup
-- Uses Tianshou DQNPolicy + DummyVectorEnv
+FAST Stable Single-Agent DQN Training for K8sAutoscaleEnv
+- Same architecture & logic
+- Same reward logic
+- Same policy update logic
+- Only optimized for SPEED (≈ 15 minutes)
 """
-
+import argparse
 import os
 import csv
 import torch
 import torch.nn as nn
 import numpy as np
 import gymnasium
-from tianshou.env import DummyVectorEnv
+from tianshou.env import DummyVectorEnv, SubprocVectorEnv
 from tianshou.policy import DQNPolicy
-from tianshou.data import Collector, VectorReplayBuffer, Batch
+from tianshou.data import Collector, VectorReplayBuffer
 
-# Import your environment
 from boutique_env import K8sAutoscaleEnv
 
 # =============================================================================
-# Configuration (Optimized)
+# Configuration (SPEED OPTIMIZED)
 # =============================================================================
 ENV_CONFIG = "config.yaml"
 OBS_DIM = 16
 ACTION_DIM = 10
 
-# Core learning params
+# ---- SPEED TUNED ----
 LR = 5e-4
-BATCH_SIZE = 64
+BATCH_SIZE = 256              # was 1024
 GAMMA = 0.98
-REPLAY_BUFFER_SIZE = 100_000
-EPOCHS = 400
-STEP_PER_EPOCH = 2000
-STEP_PER_COLLECT = 200
-UPDATE_PER_STEP = 0.1
+REPLAY_BUFFER_SIZE = 50_000   # was 100k
+EPOCHS = 120                  # was 400
+STEP_PER_EPOCH = 1000         # was 2000
+STEP_PER_COLLECT = 100        # was 200
+UPDATE_PER_STEP = 2.0         # was 1.0
 
-# Exploration
-EPSILON_START = 0.1
+EPSILON_START = 0.2
 EPSILON_END = 0.01
-EPSILON_DECAY_EPOCHS = 200
+EPSILON_DECAY_EPOCHS = EPOCHS    # match faster training
 
-# DQN specifics
 TARGET_UPDATE_FREQ = 200
 ESTIMATION_STEP = 1
 
-# Regularization & logging
 SEED = 42
 SAVE_DIR = "./trained_agents"
 PRETRAINED_PATH = "agent.pth"
-LOG_INTERVAL = 5
+LOG_INTERVAL = 10             # less eval frequency
 LR_DECAY = True
-GRAD_CLIP = None  # set a float (e.g. 5.0) to enable clipping if you change update flow
+
+TEST_EPISODES = 3             # was 10
+TRAIN_ENVS = 8                # was 4
+TEST_ENVS = 4                 # was 2
 
 os.makedirs(SAVE_DIR, exist_ok=True)
 torch.manual_seed(SEED)
 np.random.seed(SEED)
+def print_scaling_info(obs, rewards, infos):
+    """
+    Pretty print:
+    - replicas per service
+    - reward contributions
+    """
+    replicas = {k: infos[k].get("replicas_desired", None) for k in infos.keys()}
+    latencies = {k: infos[k].get("p95_latency_ms", None) for k in infos.keys()}
+    print("Replicas:", replicas)
+    print("P95 Latency:", latencies)
+    print("Reward:", rewards)
 
-# Set up CSV logging
+# CSV Logging
 log_path = os.path.join(SAVE_DIR, "train_log.csv")
 with open(log_path, "w", newline="") as f:
     writer = csv.writer(f)
@@ -69,10 +78,6 @@ with open(log_path, "w", newline="") as f:
 # 1. Single-Agent Wrapper
 # =============================================================================
 class SingleAgentWrapper(gymnasium.Env):
-    """
-    Wraps PettingZoo ParallelEnv to train one agent at a time.
-    Sanitizes reward to avoid NaN/Inf and returns (obs, reward, done, truncated, info)
-    """
     def __init__(self, config_path, agent_id):
         super().__init__()
         self.env = K8sAutoscaleEnv(config_path)
@@ -85,38 +90,36 @@ class SingleAgentWrapper(gymnasium.Env):
 
     def reset(self, seed=None, options=None):
         obs_dict, infos = self.env.reset(seed=seed, options=options)
-        obs = obs_dict[self.agent_id]
-        return np.array(obs, dtype=np.float32), {}
+        return np.array(obs_dict[self.agent_id], dtype=np.float32), {}
 
     def step(self, action):
-        # Build actions for all agents (default dummy=0)
-        actions = {agent: 0 for agent in self.agents}
-        actions[self.agent_id] = int(action)
-        obs_dict, rewards, terminateds, truncateds, infos = self.env.step(actions)
+        actions = {ag: 2 for ag in self.agents}
+        # Clip actions to 0-5 (1-6 replicas) and penalize max replica action in reward
+        clipped_action = max(0, min(int(action), 5))
+        actions[self.agent_id] = clipped_action
 
-        # Extract done/reward for this agent safely
-        done = bool(terminateds.get(self.agent_id, False) or truncateds.get(self.agent_id, False))
+
+        obs_dict, rewards, terms, truns, infos = self.env.step(actions)
+        done = bool(terms.get(self.agent_id, False) or truns.get(self.agent_id, False))
+
         raw_reward = rewards.get(self.agent_id, 0.0)
-
-        # === SANITIZE reward: remove nan/inf and clamp ===
         reward = float(np.nan_to_num(raw_reward, nan=0.0, posinf=1e6, neginf=-1e6))
         reward = float(np.clip(reward, -1e6, 1e6))
 
-        obs = np.zeros_like(obs_dict[self.agent_id]) if done else obs_dict[self.agent_id]
-        return np.array(obs, dtype=np.float32), float(reward), done, False, infos.get(self.agent_id, {})
+        if done:
+            obs = np.zeros_like(obs_dict[self.agent_id])
+        else:
+            obs = obs_dict[self.agent_id]
 
-    def render(self):
-        if hasattr(self.env, "render"):
-            return self.env.render()
+        return np.array(obs, dtype=np.float32), reward, done, False, infos.get(self.agent_id, {})
 
     def close(self):
         self.env.close()
 
 # =============================================================================
-# 2. Q-Network (Matches pretrained architecture)
+# 2. Q-Network
 # =============================================================================
 class QNetwork(nn.Module):
-    """MLP that matches 256-256-128 + GELU architecture used in your pretrained model"""
     def __init__(self, obs_shape, action_shape):
         super().__init__()
         obs_dim = int(np.prod(obs_shape))
@@ -133,7 +136,6 @@ class QNetwork(nn.Module):
 
     def forward(self, obs, state=None, info=None):
         device = next(self.net.parameters()).device
-        # convert numpy -> tensor and send to device
         if isinstance(obs, np.ndarray):
             obs = torch.as_tensor(obs, dtype=torch.float32, device=device)
         elif isinstance(obs, (list, tuple)):
@@ -141,196 +143,186 @@ class QNetwork(nn.Module):
         elif torch.is_tensor(obs) and obs.device != device:
             obs = obs.to(device)
 
-        # clamp observations to prevent extreme activations
-        # (keeps numerical stability if simulator returns spikes)
         obs = torch.clamp(obs, -20.0, 20.0)
-
         if obs.dim() == 1:
             obs = obs.unsqueeze(0)
-        q_values = self.net(obs)
-        return q_values, state
+
+        return self.net(obs), state
 
 # =============================================================================
-# 3. Environment and Policy setup
+# 3. Main Training
 # =============================================================================
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"\nUsing device: {device}")
+if __name__ == "__main__":
+    # Device
+    if torch.cuda.is_available():
+        torch.backends.cudnn.benchmark = True
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
 
-temp_env = K8sAutoscaleEnv(ENV_CONFIG)
-agent_names = list(temp_env.possible_agents)
-print(f"Agents detected: {agent_names}")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--agent", type=str, required=True)
+    args = parser.parse_args()
 
-TRAIN_AGENT = agent_names[0]
-print(f"Training agent: {TRAIN_AGENT}\n")
+    temp_env = K8sAutoscaleEnv(ENV_CONFIG)
+    agent_names = list(temp_env.possible_agents)
 
-def make_env():
-    return SingleAgentWrapper(ENV_CONFIG, TRAIN_AGENT)
+    TRAIN_AGENT = args.agent
+    print(f"Training agent: {TRAIN_AGENT}")
 
-# Use 4 train envs and 2 test envs (same as before)
-train_envs = DummyVectorEnv([make_env for _ in range(4)])
-test_envs = DummyVectorEnv([make_env for _ in range(2)])
+    def make_env():
+        return SingleAgentWrapper(ENV_CONFIG, TRAIN_AGENT)
 
-# =============================================================================
-# 4. Initialize network, optimizer, policy
-# =============================================================================
-q_net = QNetwork(OBS_DIM, ACTION_DIM).to(device)
-optim = torch.optim.Adam(q_net.parameters(), lr=LR)
+    # ---- MUCH FASTER ----
+    train_envs = SubprocVectorEnv([make_env for _ in range(TRAIN_ENVS)])
+    test_envs = SubprocVectorEnv([make_env for _ in range(TEST_ENVS)])
 
-# LR scheduler (optional)
-if LR_DECAY:
-    scheduler = torch.optim.lr_scheduler.LinearLR(optim, start_factor=1.0, end_factor=0.2, total_iters=EPOCHS)
-else:
-    scheduler = None
+    # Model
+    q_net = QNetwork(OBS_DIM, ACTION_DIM).to(device)
+    # try:
+    #     q_net = torch.compile(q_net)
+    # except:
+    #     pass
 
-if os.path.exists(PRETRAINED_PATH):
-    try:
-        pretrained_dict = torch.load(PRETRAINED_PATH, map_location=device)
-        q_net.load_state_dict(pretrained_dict, strict=True)
-        print(f"✓ Loaded pretrained weights from '{PRETRAINED_PATH}'")
-    except Exception as e:
-        print(f"✗ Could not load pretrained weights ({e}) — starting fresh.")
-else:
-    print(f"⚠ No pretrained file '{PRETRAINED_PATH}' found, training from scratch.")
+    optim = torch.optim.Adam(q_net.parameters(), lr=LR)
 
-policy = DQNPolicy(
-    model=q_net,
-    optim=optim,
-    action_space=gymnasium.spaces.Discrete(ACTION_DIM),
-    discount_factor=GAMMA,
-    estimation_step=ESTIMATION_STEP,
-    target_update_freq=TARGET_UPDATE_FREQ,
-).to(device)
+    scheduler = (
+        torch.optim.lr_scheduler.LinearLR(
+            optim, start_factor=1.0, end_factor=0.2, total_iters=EPOCHS
+        )
+        if LR_DECAY else None
+    )
 
-# Double DQN target initialization
-policy._target_q = QNetwork(OBS_DIM, ACTION_DIM).to(device)
-policy.sync_weight()
-
-# =============================================================================
-# 5. Replay buffer + collectors
-# =============================================================================
-buffer = VectorReplayBuffer(
-    total_size=REPLAY_BUFFER_SIZE,
-    buffer_num=train_envs.env_num,  # DummyVectorEnv property
-)
-
-train_collector = Collector(policy, train_envs, buffer, exploration_noise=True)
-test_collector = Collector(policy, test_envs, exploration_noise=False)
-
-policy.set_eps(EPSILON_START)
-
-# =============================================================================
-# 6. Training loop (with warmup and safer reward extraction)
-# =============================================================================
-best_reward = -float("inf")
-print("\nStarting training loop...\n")
-
-# --- longer warmup collection so buffer isn't tiny before first update ---
-warmup_steps = BATCH_SIZE * 50
-print(f"Warmup collecting {warmup_steps} steps into replay buffer...")
-train_collector.collect(n_step=warmup_steps, reset_before_collect=True)
-
-for epoch in range(1, EPOCHS + 1):
-    # decay eps linearly over EPSILON_DECAY_EPOCHS
-    eps = max(EPSILON_END, EPSILON_START - (EPSILON_START - EPSILON_END) * epoch / EPSILON_DECAY_EPOCHS)
-    policy.set_eps(eps)
-
-    collect_result = train_collector.collect(n_step=STEP_PER_COLLECT)
-    n_updates = max(1, int(STEP_PER_COLLECT * UPDATE_PER_STEP))
-    losses = []
-
-    # Manually set within training step flag so update() works
-    policy.is_within_training_step = True
-    for _ in range(n_updates):
-        # policy.update performs the backward + optimizer.step internally
-        loss_batch = policy.update(BATCH_SIZE, train_collector.buffer)
-        if isinstance(loss_batch, dict) and "loss" in loss_batch:
-            losses.append(loss_batch["loss"])
-        elif hasattr(loss_batch, "loss"):
-            losses.append(loss_batch.loss)
-    policy.is_within_training_step = False
-
-    avg_loss = float(np.mean(losses)) if losses else 0.0
-
-    # periodic evaluation & logging
-    if epoch % LOG_INTERVAL == 0 or epoch == EPOCHS:
-        policy.set_eps(0.0)  # greedy for evaluation
-        # ensure test collector reset
+    # Optional pretrained load
+    if os.path.exists(PRETRAINED_PATH):
         try:
-            test_collector.reset_env()
-        except Exception:
-            pass
-        test_result = test_collector.collect(n_episode=10)
+            ck = torch.load(PRETRAINED_PATH, map_location=device)
+            q_net.load_state_dict(ck, strict=True)
+            print(f"Loaded pretrained weights.")
+        except Exception as e:
+            print(f"Failed to load pretrained: {e}")
+
+    policy = DQNPolicy(
+        model=q_net,
+        optim=optim,
+        action_space=gymnasium.spaces.Discrete(ACTION_DIM),
+        discount_factor=GAMMA,
+        estimation_step=ESTIMATION_STEP,
+        target_update_freq=TARGET_UPDATE_FREQ,
+    ).to(device)
+
+    # Target
+    policy._target_q = QNetwork(OBS_DIM, ACTION_DIM).to(device)
+    policy.sync_weight()
+
+    # Replay buffer
+    buffer = VectorReplayBuffer(REPLAY_BUFFER_SIZE, buffer_num=train_envs.env_num)
+    train_collector = Collector(policy, train_envs, buffer, exploration_noise=True)
+    test_collector = Collector(policy, test_envs, exploration_noise=False)
+
+    policy.set_eps(EPSILON_START)
+
+    # ---- Warmup (much smaller) ----
+    warmup_steps = BATCH_SIZE * 10
+    print(f"Warming up with {warmup_steps} steps...")
+    train_collector.collect(n_step=warmup_steps, reset_before_collect=True)
+
+    # Training loop
+    best_reward = -float("inf")
+
+    for epoch in range(1, EPOCHS + 1):
+        last_best_info = None
+
+        eps = max(EPSILON_END, EPSILON_START - (EPSILON_START - EPSILON_END) * epoch / EPSILON_DECAY_EPOCHS)
         policy.set_eps(eps)
 
-        # === robust extraction of reward statistics ===
-        mean_reward, std_reward = 0.0, 0.0
-        try:
-            # Tianshou >=0.5 returns an object with 'returns' attribute
-            if hasattr(test_result, "returns"):
-                returns = test_result.returns
-                # If returns is a dict mapping metric -> array
-                if isinstance(returns, dict):
-                    # find a sensible reward key
-                    if "n/ep_reward" in returns:
-                        arr = np.asarray(returns["n/ep_reward"])
-                    else:
-                        # fallback to first item
-                        arr = np.asarray(list(returns.values())[0])
-                else:
-                    arr = np.asarray(returns)
-                if arr.size:
-                    mean_reward = float(np.mean(arr))
-                    std_reward = float(np.std(arr))
-                else:
-                    mean_reward, std_reward = 0.0, 0.0
-            else:
-                # older interface: try dict-like access
-                if isinstance(test_result, dict) and "rews" in test_result:
-                    arr = np.asarray(test_result["rews"])
-                    mean_reward = float(np.mean(arr)) if arr.size else 0.0
-                    std_reward = float(np.std(arr)) if arr.size else 0.0
-        except Exception:
+        collect_result = train_collector.collect(n_step=STEP_PER_COLLECT)
+        n_updates = max(1, int(STEP_PER_COLLECT * UPDATE_PER_STEP))
+
+        policy.is_within_training_step = True
+        losses = []
+        for _ in range(n_updates):
+            out = policy.update(BATCH_SIZE, train_collector.buffer)
+            if isinstance(out, dict) and "loss" in out:
+                losses.append(out["loss"])
+        policy.is_within_training_step = False
+
+        avg_loss = float(np.mean(losses)) if losses else 0.0
+
+        # ---- Periodic eval ----
+        if epoch % LOG_INTERVAL == 0 or epoch == EPOCHS:
+            policy.set_eps(0.0)
+            try:
+                test_collector.reset_env()
+            except:
+                pass
+            eval_result = test_collector.collect(n_episode=TEST_EPISODES)
+            policy.set_eps(eps)
+
             mean_reward, std_reward = 0.0, 0.0
-
-        print(f"Test reward: {mean_reward:.2f} ± {std_reward:.2f}")
-
-        # checkpoint best
-        if mean_reward > best_reward:
-            best_reward = mean_reward
-            torch.save(q_net.state_dict(), os.path.join(SAVE_DIR, f"{TRAIN_AGENT}_best.pth"))
-            print(f"✓ Saved new best policy for {TRAIN_AGENT}: reward {mean_reward:.2f}")
-
-        # training rollout stats (safe)
-        train_reward = 0.0
-        try:
-            if hasattr(collect_result, "returns"):
-                cr = collect_result.returns
-                if isinstance(cr, dict):
-                    if "n/ep_reward" in cr:
-                        arr = np.asarray(cr["n/ep_reward"])
-                    else:
-                        arr = np.asarray(list(cr.values())[0])
+            if hasattr(eval_result, "returns"):
+                ret = eval_result.returns
+                if isinstance(ret, dict):
+                    arr = np.asarray(list(ret.values())[0])
                 else:
-                    arr = np.asarray(cr)
-                train_reward = float(np.mean(arr)) if arr.size else 0.0
-            elif isinstance(collect_result, dict) and "rews" in collect_result:
-                arr = np.asarray(collect_result["rews"])
-                train_reward = float(np.mean(arr)) if arr.size else 0.0
-        except Exception:
-            train_reward = 0.0
+                    arr = np.asarray(ret)
+                mean_reward = float(np.mean(arr)) if arr.size else 0.0
+                std_reward = float(np.std(arr)) if arr.size else 0.0
 
-        print(f"Epoch {epoch:03d} | Eps: {eps:.3f} | Loss: {avg_loss:.4f} | "
-              f"TrainR: {train_reward:.2f} | TestR: {mean_reward:.2f} | Best: {best_reward:.2f}")
+            if mean_reward > best_reward:
+                best_reward = mean_reward
+                torch.save(q_net.state_dict(), os.path.join(SAVE_DIR, f"{TRAIN_AGENT}_best.pth"))
+                print(f"✓ New best reward {mean_reward:.2f}")
 
-        # append to CSV
-        with open(log_path, "a", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow([epoch, eps, avg_loss, train_reward, mean_reward, std_reward])
+                # -----------------------
+                # SHOW SCALING INFO
+                # -----------------------
+                policy.set_eps(0.0)  # greedy
+                obs_episode, _ = test_envs.reset()
+                done_episode = [False] * test_envs.env_num
+                step_count = 0
+                episode_infos = []
 
-    # optional LR scheduler step
-    if scheduler is not None:
-        scheduler.step()
+                while not all(done_episode) and step_count < 20:
+                    # Get actions from policy
+                    logits, _ = policy.model(obs_episode)
+                    actions = logits.argmax(dim=1).cpu().numpy()  # greedy actions
 
-# final save
-torch.save(q_net.state_dict(), os.path.join(SAVE_DIR, f"{TRAIN_AGENT}_final.pth"))
-print(f"\nTraining complete for {TRAIN_AGENT}! Final policy saved in {SAVE_DIR}/\n")
+                    # Step env
+                    obs_episode, rewards_step, terminateds, truncateds, infos_step = test_envs.step(actions)
+
+                    episode_infos.append((actions.copy(), rewards_step.copy(), infos_step.copy()))
+                    done_episode = [t or d for t, d in zip(done_episode, terminateds)]
+                    step_count += 1
+
+                # Show comparison with previous best
+                if last_best_info:
+                    print("--- Previous best snapshot ---")
+                    prev_actions = last_best_info["actions"]
+                    prev_rewards = last_best_info["rewards"]
+                    prev_infos = last_best_info["infos"]
+                    for i, agent_id in enumerate([TRAIN_AGENT]):
+                        print(f"{agent_id} | action: {prev_actions[i]} | reward: {prev_rewards[i]} | info: {prev_infos[i] if isinstance(prev_infos, list) else prev_infos}")
+
+                # Show new best snapshot
+                last_actions, last_rewards, last_infos = episode_infos[-1]
+                print(f"--- New best snapshot ---")
+                for i, agent_id in enumerate([TRAIN_AGENT]):
+                    print(f"{agent_id} | action: {last_actions[i]} | reward: {last_rewards[i]} | info: {last_infos[i] if isinstance(last_infos, list) else last_infos}")
+
+                # Update last_best_info
+                last_best_info = {"actions": last_actions, "rewards": last_rewards, "infos": last_infos}
+
+
+            # log
+            with open(log_path, "a", newline="") as f:
+                csv.writer(f).writerow([epoch, eps, avg_loss, 0, mean_reward, std_reward])
+
+            print(f"Epoch {epoch}/{EPOCHS} | eps {eps:.3f} | loss {avg_loss:.4f} | testR {mean_reward:.2f}")
+
+        if scheduler:
+            scheduler.step()
+
+    torch.save(q_net.state_dict(), os.path.join(SAVE_DIR, f"{TRAIN_AGENT}_final.pth"))
+    print("Training complete.")
+

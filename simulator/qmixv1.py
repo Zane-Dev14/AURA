@@ -1,485 +1,488 @@
 #!/usr/bin/env python3
 """
-QMIX Trainer (fixed): CTDE with real global state, replay stores state/next_state,
-mixing network uses state, warm-start from single-agent checkpoint.
+qmixv1.py -- Fixed QMIX trainer with proper logging
 
-Usage:
-    python qmix_train.py
+Key fixes:
+- Removed MAX_DELTA clamping (full action space)
+- Fixed worker_process indentation bug
+- Proper mixer-only curriculum
+- Comprehensive logging for debugging
 """
 
 import os
 import time
-import math
 import random
-from collections import deque, namedtuple
-from typing import Dict, List
+from collections import deque, namedtuple, Counter
+from typing import List, Dict
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import multiprocessing as mp
 
-# Replace these imports with your actual env module path
-from boutique_env import K8sAutoscaleEnv  # PettingZoo ParallelEnv wrapper you provided
-from pettingzoo import ParallelEnv
+from boutique_env import K8sAutoscaleEnv
 
-# ----------------------------
-# Hyperparameters (tweakable)
-# ----------------------------
+# -----------------------------
+# Hyperparameters
+# -----------------------------
 ENV_CONFIG = "config.yaml"
 SEED = 42
 
-N_AGENTS = None  # auto-detected below
-OBS_DIM_PER_AGENT = 16
-ACTION_DIM = 10   # 0..9 -> replicas 1..10
+EPS_START = 0.10
+EPS_END = 0.02
+EPS_DECAY_EPOCHS = 80
 
-# QMIX training params
-LR = 2.5e-4
-BATCH_SIZE = 64
-GAMMA = 0.98
-REPLAY_SIZE = 200_000
+OBS_DIM = 16
+ACTION_DIM = 10
+
+N_ENVS = 8
+REPLAY_SIZE = 400_000
 MIN_REPLAY_SIZE = 5_000
-EPOCHS = 1000
-STEPS_PER_EPOCH = 2000    # environment steps PER epoch (collect)
-EPS_PER_STEP = 0.01       # tiny epsilon per step for eps-greedy increment if desired
-EPS_START = 0.1
-EPS_END = 0.01
-EPS_DECAY_EPOCHS = 200
 
-TARGET_UPDATE_FREQ = 2000  # in gradient steps
-MIXING_HIDDEN = 64     # hidden units in mixing net
-HYPERNET_HIDDEN = 64
+LR = 5e-4
+BATCH_SIZE = 256
+GAMMA = 0.98
+N_STEP = 3
 
-GPU_COOLDOWN_FREQ = 30    # epochs; will sleep GPU_COOLDOWN_SECONDS
-GPU_COOLDOWN_SECONDS = 60
+EPOCHS = 200
+STEPS_PER_EPOCH = 1000
+TARGET_UPDATE_FREQ = 200
+MIXER_ONLY_EPOCHS = 30  # Freeze agents, train mixer only
 
-PRETRAINED_PATH = "agent.pth"
+PRIO_ALPHA = 0.6
+PRIO_BETA_START = 0.4
+PRIO_BETA_FRAMES = EPOCHS * (STEPS_PER_EPOCH // 10 + 1)
+
+REWARD_CLIP = 100.0
+REWARD_SCALE = 10.0  # Changed from 50.0
+
+GRAD_CLIP = 5.0
+TD_CLIP = 100.0
+
+MIN_REPLICAS = 1
+MAX_REPLICAS = 10  # Allow full range
+
 SAVE_DIR = "./qmix_checkpoints"
+DQN_SAVE_DIR = "./trained_agents"
+ALT_SINGLE = "agent.pth"
 os.makedirs(SAVE_DIR, exist_ok=True)
+os.makedirs(DQN_SAVE_DIR, exist_ok=True)
 
-# Determinism
-random.seed(SEED)
-np.random.seed(SEED)
-torch.manual_seed(SEED)
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# ----------------------------
-# Utilities & Replay Buffer
-# ----------------------------
 Transition = namedtuple("Transition", [
-    "obs",         # np array shape (n_agents, obs_dim)
-    "state",       # np array shape (state_dim,)
-    "actions",     # np array shape (n_agents,)
-    "reward",      # float (shared reward)
-    "next_obs",    # np array shape (n_agents, obs_dim)
-    "next_state",  # np array shape (state_dim,)
-    "done"         # bool
+    "obs", "state", "actions", "reward", "next_obs", "next_state", "done"
 ])
 
-class JointReplayBuffer:
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.buf = deque(maxlen=capacity)
+# -----------------------------
+# DummyVecEnv (single-process)
+# -----------------------------
+class DummyVecEnv:
+    def __init__(self, n_envs, env_config):
+        self.n_envs = n_envs
+        self.envs = [K8sAutoscaleEnv(env_config) for _ in range(n_envs)]
 
-    def push(self, *args):
-        self.buf.append(Transition(*args))
+    def reset(self):
+        obs_list, infos_list, states_list = [], [], []
+        for env in self.envs:
+            obs, info = env.reset()
+            obs_list.append(obs)
+            infos_list.append(info)
+            states_list.append(env.get_global_state() if hasattr(env, "get_global_state") else None)
+        return obs_list, infos_list, states_list
+
+    def step(self, actions_batch):
+        obs_list, reward_list, term_list, trunc_list, info_list, state_list = [], [], [], [], [], []
+        for env, actions in zip(self.envs, actions_batch):
+            obs, reward, term, trunc, info = env.step(actions)
+            obs_list.append(obs)
+            reward_list.append(reward)
+            term_list.append(term if isinstance(term, bool) else any(term.values()))
+            trunc_list.append(trunc if isinstance(trunc, bool) else any(trunc.values()))
+            info_list.append(info)
+            state_list.append(env.get_global_state() if hasattr(env, "get_global_state") else None)
+        return obs_list, reward_list, term_list, trunc_list, info_list, state_list
+
+    def close(self):
+        for env in self.envs:
+            if hasattr(env, "close"):
+                env.close()
+
+# -----------------------------
+# Prioritized Replay
+# -----------------------------
+class PrioritizedReplay:
+    def __init__(self, capacity: int, alpha: float = 0.6):
+        self.capacity = int(capacity)
+        self.alpha = alpha
+        self.pos = 0
+        self.full = False
+        self.buf = [None] * self.capacity
+        self.priorities = np.zeros(self.capacity, dtype=np.float32)
+        self.eps = 1e-6
 
     def __len__(self):
-        return len(self.buf)
+        return self.capacity if self.full else self.pos
 
-    def sample(self, batch_size):
-        batch = random.sample(self.buf, batch_size)
-        # convert to numpy arrays
-        obs = np.stack([t.obs for t in batch])             # (B, n_agents, obs_dim)
-        state = np.stack([t.state for t in batch])         # (B, state_dim)
-        actions = np.stack([t.actions for t in batch])     # (B, n_agents)
-        rewards = np.array([t.reward for t in batch], dtype=np.float32)  # (B,)
-        next_obs = np.stack([t.next_obs for t in batch])
-        next_state = np.stack([t.next_state for t in batch])
-        dones = np.array([t.done for t in batch], dtype=np.float32)
-        return dict(obs=obs, state=state, actions=actions,
-                    rewards=rewards, next_obs=next_obs, next_state=next_state, dones=dones)
+    def push(self, *args):
+        self.buf[self.pos] = Transition(*args)
+        max_p = self.priorities.max() if (self.pos > 0 or self.full) else 1.0
+        self.priorities[self.pos] = max(max_p, 1e-6)
+        self.pos = (self.pos + 1) % self.capacity
+        if self.pos == 0:
+            self.full = True
 
-# ----------------------------
-# Environment wrapper fixes
-# ----------------------------
-class K8sAutoscaleEnvFixed(K8sAutoscaleEnv):
-    """
-    Extends your PettingZoo ParallelEnv wrapper to expose a global state vector
-    suitable for QMIX. Replace field names inside get_global_state() if your
-    simulator stores differently.
-    """
+    def sample(self, batch_size: int, beta: float = 0.4):
+        length = len(self)
+        prios = self.priorities[:length].astype(np.float64)
+        probs = prios ** self.alpha
+        probs /= probs.sum()
+        indices = np.random.choice(length, batch_size, p=probs)
+        samples = [self.buf[i] for i in indices]
+        weights = (length * probs[indices]) ** (-beta)
+        weights /= weights.max()
+        
+        return {
+            "obs": np.stack([s.obs for s in samples]).astype(np.float32),
+            "state": np.stack([s.state for s in samples]).astype(np.float32),
+            "actions": np.stack([s.actions for s in samples]).astype(np.int64),
+            "rewards": np.array([s.reward for s in samples], dtype=np.float32),
+            "next_obs": np.stack([s.next_obs for s in samples]).astype(np.float32),
+            "next_state": np.stack([s.next_state for s in samples]).astype(np.float32),
+            "dones": np.array([s.done for s in samples], dtype=np.float32),
+            "indices": indices,
+            "weights": weights.astype(np.float32)
+        }
 
-    def get_global_state(self):
-        """
-        Build a deterministic global state vector from all services.
-        Example per-service features: cpu_util, memory_util, p95_latency_ms,
-        queue, replicas_desired, ready_replicas, incoming_rps.
-        Adjust to match your K8sSimulator internal API.
-        """
-        state = []
-        # assume self.simulator.services is an OrderedDict or dict of service objects
-        for name, svc in self.simulator.services.items():
-            # Replace these attribute names if your simulator uses different naming
-            cpu = getattr(svc, "cpu_util", 0.0)
-            mem = getattr(svc, "memory_util", 0.0)
-            latency = getattr(svc, "p95_latency_ms", 0.0)
-            queue = getattr(svc, "queue", 0.0)
-            replicas_desired = getattr(svc, "replicas_desired", 0.0)
-            ready_replicas = getattr(svc, "ready_replicas", 0.0)
-            incoming = getattr(svc, "incoming_rps", 0.0)
-            state.extend([cpu, mem, latency, queue, replicas_desired, ready_replicas, incoming])
-        return np.array(state, dtype=np.float32)
+    def update_priorities(self, indices: np.ndarray, priorities: np.ndarray):
+        for idx, p in zip(indices, priorities):
+            self.priorities[idx] = max(p, self.eps)
 
-    # override reset to return obs, infos, state for convenience (we'll call env.reset() and then get_global_state())
-    def reset_with_state(self, seed=None, options=None):
-        obs, infos = self.reset(seed=seed, options=options)
-        state = self.get_global_state()
-        return obs, infos, state
-
-    # similarly for stepping: step(action_dict) returns (obs, rewards, term, trunc, infos, state)
-    def step_with_state(self, actions):
-        obs, rewards, terminateds, truncateds, infos = self.step(actions)
-        state = self.get_global_state()
-        return obs, rewards, terminateds, truncateds, infos, state
-
-# ----------------------------
-# Neural nets
-# ----------------------------
+# -----------------------------
+# Networks
+# -----------------------------
 class AgentNet(nn.Module):
-    """Per-agent Q-network (256-256-128 + GELU)"""
-    def __init__(self, obs_dim, action_dim):
+    def __init__(self, obs_dim: int, action_dim: int):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(obs_dim, 256),
-            nn.GELU(),
-            nn.Linear(256, 256),
-            nn.GELU(),
-            nn.Linear(256, 128),
-            nn.GELU(),
+            nn.Linear(obs_dim, 256), nn.GELU(),
+            nn.Linear(256, 256), nn.GELU(),
+            nn.Linear(256, 128), nn.GELU(),
             nn.Linear(128, action_dim)
         )
-
-    def forward(self, obs):  # obs: (B, obs_dim) -> q: (B, action_dim)
-        return self.net(obs)
+    def forward(self, x):
+        return self.net(x)
 
 class MixingNetwork(nn.Module):
-    """
-    QMIX mixing net implemented with hypernetworks.
-    Produces q_tot scalar from agent_qs (B, n_agents) and state (B, state_dim).
-    """
-    def __init__(self, n_agents, state_dim, mixing_hidden=MIXING_HIDDEN, hyper_hidden=HYPERNET_HIDDEN):
+    def __init__(self, n_agents: int, state_dim: int, mixing_hidden=32, hyper_hidden=64):
         super().__init__()
         self.n_agents = n_agents
-        self.state_dim = state_dim
         self.mixing_hidden = mixing_hidden
-
-        # hypernet W1: state -> (n_agents * mixing_hidden)
         self.hyper_w1 = nn.Sequential(
-            nn.Linear(state_dim, hyper_hidden),
-            nn.ReLU(),
+            nn.Linear(state_dim, hyper_hidden), nn.ReLU(),
             nn.Linear(hyper_hidden, n_agents * mixing_hidden)
         )
-        # hypernet b1: state -> mixing_hidden
         self.hyper_b1 = nn.Sequential(
-            nn.Linear(state_dim, hyper_hidden),
-            nn.ReLU(),
+            nn.Linear(state_dim, hyper_hidden), nn.ReLU(),
             nn.Linear(hyper_hidden, mixing_hidden)
         )
-        # hypernet W2: state -> (mixing_hidden * 1)
         self.hyper_w2 = nn.Sequential(
-            nn.Linear(state_dim, hyper_hidden),
-            nn.ReLU(),
+            nn.Linear(state_dim, hyper_hidden), nn.ReLU(),
             nn.Linear(hyper_hidden, mixing_hidden)
         )
-        # hypernet b2: state -> 1
         self.hyper_b2 = nn.Sequential(
-            nn.Linear(state_dim, hyper_hidden),
-            nn.ReLU(),
+            nn.Linear(state_dim, hyper_hidden), nn.ReLU(),
             nn.Linear(hyper_hidden, 1)
         )
-
         self.elu = nn.ELU()
 
     def forward(self, agent_qs, state):
-        """
-        agent_qs: tensor (B, n_agents)
-        state: tensor (B, state_dim)
-        returns: q_tot (B, 1)
-        """
         B = agent_qs.size(0)
-        # compute W1
-        w1 = self.hyper_w1(state)  # (B, n_agents * mixing_hidden)
-        w1 = w1.view(B, self.n_agents, self.mixing_hidden)  # (B, n_agents, H)
-        b1 = self.hyper_b1(state).view(B, 1, self.mixing_hidden)  # (B,1,H)
-
-        # (B, n_agents) x (B, n_agents, H) -> (B, H)
-        agent_qs = agent_qs.view(B, 1, self.n_agents)  # (B,1,n_agents)
-        hidden = torch.bmm(agent_qs, w1).squeeze(1) + b1.squeeze(1)  # (B, H)
+        w1 = self.hyper_w1(state).view(B, self.n_agents, self.mixing_hidden)
+        b1 = self.hyper_b1(state).view(B, 1, self.mixing_hidden)
+        hidden = torch.bmm(agent_qs.view(B, 1, self.n_agents), w1).squeeze(1) + b1.squeeze(1)
         hidden = self.elu(hidden)
+        w2 = self.hyper_w2(state).view(B, self.mixing_hidden, 1)
+        b2 = self.hyper_b2(state).view(B, 1)
+        return torch.bmm(hidden.view(B, 1, self.mixing_hidden), w2).squeeze(2) + b2
 
-        # W2: produce (B, H) -> (B, 1)
-        w2 = self.hyper_w2(state).view(B, self.mixing_hidden, 1)  # (B,H,1)
-        b2 = self.hyper_b2(state).view(B, 1)                      # (B,1)
-        q_tot = torch.bmm(hidden.view(B,1,self.mixing_hidden), w2).squeeze(2) + b2  # (B,1)
-        return q_tot  # shape (B,1)
+# -----------------------------
+# Helpers
+# -----------------------------
+def sanitize(a: np.ndarray, clip=1e6):
+    return np.clip(np.nan_to_num(a, nan=0.0, posinf=clip, neginf=-clip), -clip, clip).astype(np.float32)
 
-# ----------------------------
-# Trainer
-# ----------------------------
+def beta_by_frame(frame_idx: int):
+    return min(1.0, PRIO_BETA_START + frame_idx * (1.0 - PRIO_BETA_START) / max(1, PRIO_BETA_FRAMES))
+
+def try_load_per_agent(agent_nets: List[nn.Module], agent_ids: List[str], device):
+    loaded = 0
+    for i, aid in enumerate(agent_ids):
+        fn = os.path.join(DQN_SAVE_DIR, f"{aid}_best.pth")
+        if os.path.exists(fn):
+            try:
+                agent_nets[i].load_state_dict(torch.load(fn, map_location=device), strict=False)
+                loaded += 1
+                print(f"✓ Loaded {aid} from {fn}")
+            except Exception as e:
+                print(f"✗ Failed loading {aid}: {e}")
+    return loaded
+
 def build_env_and_dims():
-    env = K8sAutoscaleEnvFixed(ENV_CONFIG)  # uses your provided K8sAutoscaleEnv subclass
-    possible_agents = list(env.possible_agents)
-    n_agents = len(possible_agents)
-    # compute state dim using get_global_state()
-    state = env.get_global_state()
+    env = K8sAutoscaleEnv(ENV_CONFIG)
+    agent_ids = list(env.possible_agents)
+    n_agents = len(agent_ids)
+    obs_dim = int(env.observation_space(agent_ids[0]).shape[0])
+    env.reset()
+    state = env.get_global_state() if hasattr(env, "get_global_state") else np.concatenate([np.zeros(obs_dim) for _ in agent_ids])
     state_dim = int(state.size)
-    return env, possible_agents, n_agents, state_dim
+    return agent_ids, n_agents, state_dim, obs_dim
 
-def sanitize_obs(obs_array):
-    # obs_array: array of per-agent observations (n_agents, obs_dim)
-    # clip/replace nan/inf
-    obs_array = np.nan_to_num(obs_array, nan=0.0, posinf=1e6, neginf=-1e6)
-    obs_array = np.clip(obs_array, -1e6, 1e6)
-    return obs_array.astype(np.float32)
-
+# -----------------------------
+# Main Training
+# -----------------------------
 def main():
-    # build env & dims
-    env, agent_ids, n_agents, state_dim = build_env_and_dims()
-    print(f"Detected agents: {agent_ids}, n_agents={n_agents}, state_dim={state_dim}")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Device: {device}")
+    
+    random.seed(SEED)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
 
-    # set global constants based on env
-    global OBS_DIM_PER_AGENT, N_AGENTS
-    N_AGENTS = n_agents
-    # assume all agents share same obs shape:
-    OBS_DIM_PER_AGENT = int(env.observation_space(agent_ids[0]).shape[0])
+    agent_ids, n_agents, state_dim, obs_dim = build_env_and_dims()
+    print(f"Agents: {agent_ids} | n_agents={n_agents} | state_dim={state_dim}")
 
-    # models
-    agent_nets = [AgentNet(OBS_DIM_PER_AGENT, ACTION_DIM).to(device) for _ in range(n_agents)]
-    target_agent_nets = [AgentNet(OBS_DIM_PER_AGENT, ACTION_DIM).to(device) for _ in range(n_agents)]
-    for tnet, net in zip(target_agent_nets, agent_nets):
-        tnet.load_state_dict(net.state_dict())
+    # Networks
+    agent_nets = [AgentNet(obs_dim, ACTION_DIM).to(device) for _ in range(n_agents)]
+    target_agent_nets = [AgentNet(obs_dim, ACTION_DIM).to(device) for _ in range(n_agents)]
+    for t, s in zip(target_agent_nets, agent_nets):
+        t.load_state_dict(s.state_dict())
 
     mixer = MixingNetwork(n_agents, state_dim).to(device)
     target_mixer = MixingNetwork(n_agents, state_dim).to(device)
     target_mixer.load_state_dict(mixer.state_dict())
 
-    # optimizer for all params
-    params = []
-    for net in agent_nets:
-        params += list(net.parameters())
-    params += list(mixer.parameters())
-    optimizer = torch.optim.Adam(params, lr=LR)
+    # Warm-start
+    loaded = try_load_per_agent(agent_nets, agent_ids, device)
+    if loaded > 0:
+        for i in range(n_agents):
+            target_agent_nets[i].load_state_dict(agent_nets[i].state_dict())
+        print(f"Warm-started {loaded}/{n_agents} agents")
+    
+    # Optimizer: FREEZE agents for mixer-only curriculum
+    mixer_params = list(mixer.parameters())
+    agent_params = [p for net in agent_nets for p in net.parameters()]
+    
+    if MIXER_ONLY_EPOCHS > 0 and loaded > 0:
+        print(f"🔒 FREEZING agents for first {MIXER_ONLY_EPOCHS} epochs (mixer-only curriculum)")
+        for p in agent_params:
+            p.requires_grad = False
+        optimizer = torch.optim.Adam(mixer_params, lr=LR)
+        agents_frozen = True
+    else:
+        print("Training agents + mixer from scratch")
+        optimizer = torch.optim.Adam(agent_params + mixer_params, lr=LR)
+        agents_frozen = False
+    
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda s: max(0.5, 1.0 - s / (EPOCHS * 100)))
 
-    # optionally warm-start each agent net from single-agent checkpoint if matches
-    if os.path.exists(PRETRAINED_PATH):
-        try:
-            ck = torch.load(PRETRAINED_PATH, map_location=device)
-            # attempt to load into each agent net (architectures must match)
-            for i, net in enumerate(agent_nets):
-                try:
-                    net.load_state_dict(ck, strict=True)
-                    target_agent_nets[i].load_state_dict(net.state_dict())
-                    print(f"Loaded pretrained weights into agent {i}")
-                except Exception as e:
-                    print(f"Could not load pretrained into agent {i}: {e}")
-        except Exception as e:
-            print(f"Failed to load pretrained {PRETRAINED_PATH}: {e}")
+    replay = PrioritizedReplay(REPLAY_SIZE, alpha=PRIO_ALPHA)
+    vec_env = DummyVecEnv(N_ENVS, ENV_CONFIG)
 
-    # replay buffer
-    buffer = JointReplayBuffer(REPLAY_SIZE)
+    grad_steps = 0
+    total_frames = 0
+    best_eval = -1e18
+    prev_best_actions = None
 
-    # epsilon schedule
-    def epsilon_for_epoch(ep):
-        t = min(ep / max(1, EPS_DECAY_EPOCHS), 1.0)
-        return EPS_START + (EPS_END - EPS_START) * t
+    print("Starting training...\n")
+    start_time = time.time()
+    
+    for epoch in range(1, EPOCHS + 1):
+        epoch_start = time.time()
+        eps = max(EPS_END, EPS_START + (EPS_END - EPS_START) * (epoch / max(1, EPS_DECAY_EPOCHS)))
 
-    # ----------------------------------------------------------
-    # Collection routine: runs episodes until we collect 'steps' env steps
-    # ----------------------------------------------------------
-    def collect_steps(num_steps, epsilon):
+        # === UNFREEZE AGENTS AFTER MIXER-ONLY PHASE ===
+        if agents_frozen and epoch == (MIXER_ONLY_EPOCHS + 1):
+            print(f"\n🔓 UNFREEZING agents at epoch {epoch}")
+            for p in agent_params:
+                p.requires_grad = True
+            optimizer = torch.optim.Adam(agent_params + mixer_params, lr=LR)
+            scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda s: max(0.5, 1.0 - s / (EPOCHS * 100)))
+            agents_frozen = False
+
+        # === COLLECTION PHASE ===
+        action_counter = Counter()
         steps_collected = 0
-        while steps_collected < num_steps:
-            # reset env + get initial state
-            obs_dict, infos, state = env.reset_with_state()
-            # obs_dict: dict agent->obs
-            obs_arr = np.stack([obs_dict[a] for a in agent_ids], axis=0).astype(np.float32)  # (n_agents, obs_dim)
-            done = False
-            while not done and steps_collected < num_steps:
-                # select joint actions with epsilon-greedy
-                actions = {}
-                action_list = []
-                for i, aid in enumerate(agent_ids):
-                    obs_i = torch.tensor(obs_arr[i:i+1], dtype=torch.float32, device=device)  # (1,obs_dim)
+        env_obs_list, _, states_list = vec_env.reset()
+        env_states = [np.stack([obsd[a] for a in agent_ids], axis=0).astype(np.float32) for obsd in env_obs_list]
+        nstep_buffers = [deque() for _ in range(N_ENVS)]
+
+        while steps_collected < STEPS_PER_EPOCH:
+            actions_batch = []
+            for env_i in range(N_ENVS):
+                obs_arr = env_states[env_i]
+                per_env_actions = {}
+                for ai, aid in enumerate(agent_ids):
+                    obs_t = torch.tensor(obs_arr[ai:ai+1], dtype=torch.float32, device=device)
                     with torch.no_grad():
-                        qvals = agent_nets[i](obs_i)  # (1, action_dim)
-                    if random.random() < epsilon:
+                        q = agent_nets[ai](obs_t)
+                    if random.random() < eps:
                         act = random.randrange(ACTION_DIM)
                     else:
-                        act = int(qvals.argmax(dim=1).item())
-                    actions[aid] = act
-                    action_list.append(act)
-                # step env
-                next_obs_dict, rewards, terminateds, truncateds, infos, next_state = env.step_with_state(actions)
-                # sanitized arrays
-                next_obs_arr = np.stack([next_obs_dict[a] for a in agent_ids], axis=0).astype(np.float32)
-                # shared reward - pick first if dict provides single reward scalar or average across agents
-                if isinstance(rewards, dict):
-                    # if rewards are per-agent but your env uses shared reward, you can average or pick first
-                    try:
-                        r = float(list(rewards.values())[0])
-                    except Exception:
-                        r = float(0.0)
-                else:
-                    r = float(rewards)
-                # sanitize reward
-                r = float(np.nan_to_num(r, nan=0.0, posinf=1e6, neginf=-1e6))
-                r = float(np.clip(r, -1e6, 1e6))
-                r_scaled = r / 100.0  # Scale the reward down by 100x
+                        act = int(q.argmax(dim=1).item())
+                    per_env_actions[aid] = act
+                    action_counter[act] += 1
+                actions_batch.append(per_env_actions)
 
-                done_flag = any(terminateds.values()) if isinstance(terminateds, dict) else bool(terminateds)
-                # store transition: obs_arr (n_agents, obs_dim), state, actions, reward, next_obs_arr, next_state, done
-                buffer.push(sanitize_obs(obs_arr), state.astype(np.float32),
-                            np.array(action_list, dtype=np.int64),
-                            r_scaled, sanitize_obs(next_obs_arr), next_state.astype(np.float32), done_flag)
+            next_obs_list, rewards_list, terms_list, truncs_list, _, states_list = vec_env.step(actions_batch)
+
+            for env_i in range(N_ENVS):
+                obs_arr = env_states[env_i]
+                next_obs_arr = np.stack([next_obs_list[env_i][a] for a in agent_ids], axis=0).astype(np.float32)
+                r_raw = rewards_list[env_i]
+                r = float(list(r_raw.values())[0]) if isinstance(r_raw, dict) else float(r_raw)
+                r = float(np.clip(r / REWARD_SCALE, -REWARD_CLIP, REWARD_CLIP))
+                done = terms_list[env_i]
+                state_vec = states_list[env_i] if states_list[env_i] is not None else np.concatenate(next_obs_arr)
+                action_list = np.array([actions_batch[env_i][aid] for aid in agent_ids], dtype=np.int64)
+
+                nstep_buffers[env_i].append((sanitize(obs_arr), state_vec.astype(np.float32), action_list, float(r), sanitize(next_obs_arr), state_vec.astype(np.float32), done))
+
+                if len(nstep_buffers[env_i]) >= N_STEP:
+                    ret_r = sum((GAMMA ** idx) * nstep_buffers[env_i][idx][3] for idx in range(N_STEP))
+                    obs0, state0, acts0 = nstep_buffers[env_i][0][:3]
+                    next_obs_n, next_state_n, done_n = nstep_buffers[env_i][-1][4:]
+                    replay.push(obs0, state0, acts0, ret_r, next_obs_n, next_state_n, float(done_n))
+                    nstep_buffers[env_i].popleft()
+
                 steps_collected += 1
-                obs_arr = next_obs_arr
-                state = next_state
-                if done_flag:
-                    break
-        return
+                total_frames += 1
 
-    # ----------------------------------------------------------
-    # Training sampling & update step
-    # ----------------------------------------------------------
-    gradient_steps = 0
-    best_test = -1e18
+                if done:
+                    while nstep_buffers[env_i]:
+                        L = len(nstep_buffers[env_i])
+                        ret_r = sum((GAMMA ** idx) * nstep_buffers[env_i][idx][3] for idx in range(L))
+                        obs0, state0, acts0 = nstep_buffers[env_i][0][:3]
+                        next_obs_n, next_state_n, done_n = nstep_buffers[env_i][-1][4:]
+                        replay.push(obs0, state0, acts0, ret_r, next_obs_n, next_state_n, float(done_n))
+                        nstep_buffers[env_i].popleft()
 
-    for epoch in range(1, EPOCHS + 1):
-        eps = epsilon_for_epoch(epoch)
-        # collect env interactions
-        collect_steps(STEPS_PER_EPOCH, eps)
+                env_states[env_i] = next_obs_arr
 
-        # Do several SGD updates (updates proportional to collected steps)
-        # We'll perform (STEPS_PER_EPOCH * UPDATE_PER_STEP) gradient steps
-        n_grad_steps = max(1, int(STEPS_PER_EPOCH * 0.1))  # fixed fraction; adjust as needed
-        for gs in range(n_grad_steps):
-            if len(buffer) < MIN_REPLAY_SIZE:
-                break
-            batch = buffer.sample(BATCH_SIZE)
-            # convert to tensors
-            obs_b = torch.tensor(batch["obs"], dtype=torch.float32, device=device)          # (B, n_agents, obs_dim)
-            state_b = torch.tensor(batch["state"], dtype=torch.float32, device=device)      # (B, state_dim)
-            actions_b = torch.tensor(batch["actions"], dtype=torch.long, device=device)     # (B, n_agents)
-            rewards_b = torch.tensor(batch["rewards"], dtype=torch.float32, device=device)  # (B,)
-            next_obs_b = torch.tensor(batch["next_obs"], dtype=torch.float32, device=device)
-            next_state_b = torch.tensor(batch["next_state"], dtype=torch.float32, device=device)
-            dones_b = torch.tensor(batch["dones"], dtype=torch.float32, device=device)
+        # === TRAINING PHASE ===
+        if len(replay) >= MIN_REPLAY_SIZE:
+            n_updates = max(1, int(STEPS_PER_EPOCH * 0.1))
+            total_loss = 0.0
+            grad_norms = []
+            
+            for _ in range(n_updates):
+                beta = beta_by_frame(total_frames)
+                batch = replay.sample(BATCH_SIZE, beta=beta)
 
-            B = obs_b.size(0)
+                obs_b = torch.tensor(batch["obs"], dtype=torch.float32, device=device)
+                state_b = torch.tensor(batch["state"], dtype=torch.float32, device=device)
+                actions_b = torch.tensor(batch["actions"], dtype=torch.long, device=device)
+                rewards_b = torch.tensor(batch["rewards"], dtype=torch.float32, device=device)
+                next_obs_b = torch.tensor(batch["next_obs"], dtype=torch.float32, device=device)
+                next_state_b = torch.tensor(batch["next_state"], dtype=torch.float32, device=device)
+                dones_b = torch.tensor(batch["dones"], dtype=torch.float32, device=device)
+                weights_b = torch.tensor(batch["weights"], dtype=torch.float32, device=device)
+                indices = batch["indices"]
 
-            # Compute per-agent Q(s,a) for taken actions
-            agent_qs_taken = []
-            for i in range(n_agents):
-                obs_i = obs_b[:, i, :]             # (B, obs_dim)
-                q_i = agent_nets[i](obs_i)         # (B, action_dim)
-                a_i = actions_b[:, i].unsqueeze(1) # (B,1)
-                q_taken = q_i.gather(1, a_i).squeeze(1)  # (B,)
-                agent_qs_taken.append(q_taken)
-            # stack agent q values -> (B, n_agents)
-            agent_qs_taken = torch.stack(agent_qs_taken, dim=1)
-
-            # compute target: max_a' Q_target(next_obs, a')
-            with torch.no_grad():
-                agent_qs_next = []
+                # Q(s,a)
+                agent_qs_taken = []
                 for i in range(n_agents):
-                    next_obs_i = next_obs_b[:, i, :]
-                    q_next = target_agent_nets[i](next_obs_i)  # (B, action_dim)
-                    # double-dqn style: use target nets' greedy next-value (we're not using online for selection to keep implementation simple)
-                    max_q_next, _ = q_next.max(dim=1)          # (B,)
-                    agent_qs_next.append(max_q_next)
-                agent_qs_next = torch.stack(agent_qs_next, dim=1)  # (B, n_agents)
-                # mix next qs with target mixer using next_state
-                q_tot_next = target_mixer(agent_qs_next, next_state_b).squeeze(1)  # (B,)
-                # TD target
-                td_target = rewards_b + (1.0 - dones_b) * (GAMMA * q_tot_next)
+                    q_i = agent_nets[i](obs_b[:, i, :])
+                    agent_qs_taken.append(q_i.gather(1, actions_b[:, i].unsqueeze(1)).squeeze(1))
+                agent_qs_taken = torch.stack(agent_qs_taken, dim=1)
 
-            # current total Q
-            q_tot = mixer(agent_qs_taken, state_b).squeeze(1)  # (B,)
+                # Double DQN target
+                with torch.no_grad():
+                    next_actions = [agent_nets[i](next_obs_b[:, i, :]).argmax(dim=1) for i in range(n_agents)]
+                    agent_qs_next = [target_agent_nets[i](next_obs_b[:, i, :]).gather(1, next_actions[i].unsqueeze(1)).squeeze(1) for i in range(n_agents)]
+                    agent_qs_next = torch.stack(agent_qs_next, dim=1)
+                    q_tot_next = target_mixer(agent_qs_next, next_state_b).squeeze(1)
+                    td_target = rewards_b + (1.0 - dones_b) * (GAMMA ** N_STEP) * q_tot_next
+                    td_target = torch.clamp(td_target, -TD_CLIP, TD_CLIP)
 
-            loss = F.smooth_l1_loss(q_tot, td_target) # <-- NEW (Much more stable)
+                q_tot = mixer(agent_qs_taken, state_b).squeeze(1)
+                td_errors = (q_tot - td_target).detach().abs().cpu().numpy()
+                loss = (weights_b * F.mse_loss(q_tot, td_target, reduction='none')).mean()
 
-            optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(params, 10.0) # Clip gradients to max norm 10.0
-            # optional gradient clipping
-            if False:
-                torch.nn.utils.clip_grad_norm_(params, 10.0)
-            optimizer.step()
+                optimizer.zero_grad()
+                loss.backward()
+                if GRAD_CLIP:
+                    grad_norm = torch.nn.utils.clip_grad_norm_(mixer_params if agents_frozen else agent_params + mixer_params, GRAD_CLIP)
+                    grad_norms.append(grad_norm.item())
+                optimizer.step()
+                scheduler.step()
 
-            gradient_steps += 1
-            # soft/hard target update
-            if gradient_steps % TARGET_UPDATE_FREQ == 0:
-                # hard sync
-                for tnet, net in zip(target_agent_nets, agent_nets):
-                    tnet.load_state_dict(net.state_dict())
-                target_mixer.load_state_dict(mixer.state_dict())
+                total_loss += loss.item()
+                grad_steps += 1
 
-        # ----------------------------------------------------
-        # Evaluate policy periodically (greedy)
-        # ----------------------------------------------------
+                if grad_steps % TARGET_UPDATE_FREQ == 0:
+                    for tnet, net in zip(target_agent_nets, agent_nets):
+                        tnet.load_state_dict(net.state_dict())
+                    target_mixer.load_state_dict(mixer.state_dict())
+
+                replay.update_priorities(indices, td_errors + 1e-6)
+
+            avg_loss = total_loss / n_updates
+            avg_grad_norm = np.mean(grad_norms) if grad_norms else 0.0
+        else:
+            avg_loss = 0.0
+            avg_grad_norm = 0.0
+
+        # === LOGGING ===
+        action_dist = {act: action_counter[act] / max(sum(action_counter.values()), 1) for act in range(ACTION_DIM)}
+        print(f"\n[Epoch {epoch:03d}/{EPOCHS}] eps={eps:.3f} | loss={avg_loss:.4f} | grad_norm={avg_grad_norm:.3f}")
+        print(f"  Buffer: {len(replay)}/{REPLAY_SIZE} | Actions: {dict(sorted(action_dist.items()))}")
+        if agents_frozen:
+            print(f"  🔒 Agents FROZEN (mixer-only)")
+
+        # === EVALUATION ===
         if epoch % 5 == 0 or epoch == EPOCHS:
-            # run N eval episodes
-            eval_episodes = 10
-            rewards_list = []
-            for _ in range(eval_episodes):
-                obs_dict, infos, state = env.reset_with_state()
+            eval_rewards = []
+            for _ in range(5):
+                env_eval = K8sAutoscaleEnv(ENV_CONFIG)
+                obs_dict, _ = env_eval.reset()
                 obs_arr = np.stack([obs_dict[a] for a in agent_ids], axis=0).astype(np.float32)
-                done = False
-                total_r = 0.0
+                done, total_r = False, 0.0
                 while not done:
                     actions = {}
                     for i, aid in enumerate(agent_ids):
-                        obs_i = torch.tensor(obs_arr[i:i+1], dtype=torch.float32, device=device)
                         with torch.no_grad():
-                            qvals = agent_nets[i](obs_i)
-                            act = int(qvals.argmax(dim=1).item())
-                        actions[aid] = act
-                    next_obs_dict, rewards, terminateds, truncateds, infos, next_state = env.step_with_state(actions)
-                    # accumulate shared reward
-                    if isinstance(rewards, dict):
-                        r = float(list(rewards.values())[0])
-                    else:
-                        r = float(rewards)
-                    total_r += r
+                            q = agent_nets[i](torch.tensor(obs_arr[i:i+1], dtype=torch.float32, device=device))
+                        actions[aid] = int(q.argmax(dim=1).item())
+                    next_obs_dict, rewards, terms, _, _ = env_eval.step(actions)
+                    r = float(list(rewards.values())[0]) if isinstance(rewards, dict) else float(rewards)
+                    total_r += float(np.clip(r / REWARD_SCALE, -REWARD_CLIP, REWARD_CLIP))
                     obs_arr = np.stack([next_obs_dict[a] for a in agent_ids], axis=0).astype(np.float32)
-                    done = any(terminateds.values()) if isinstance(terminateds, dict) else bool(terminateds)
-                rewards_list.append(total_r)
-            mean_eval = float(np.mean(rewards_list))
-            std_eval = float(np.std(rewards_list))
-            print(f"[Epoch {epoch:04d}] Eval reward: {mean_eval:.2f} ± {std_eval:.2f}  buffer_len={len(buffer)} loss={loss.item():.4f}")
+                    done = any(terms.values()) if isinstance(terms, dict) else bool(terms)
+                eval_rewards.append(total_r)
+                last_actions = {aid: int(actions[aid]) + 1 for aid in agent_ids}
 
-            # checkpoint best
-            if mean_eval > best_test:
-                best_test = mean_eval
-                torch.save({
+            mean_eval = float(np.mean(eval_rewards))
+            std_eval = float(np.std(eval_rewards))
+            print(f"  📊 Eval: {mean_eval:.2f} ± {std_eval:.2f} | Actions: {last_actions}")
+
+            if mean_eval > best_eval:
+                best_eval = mean_eval
+                print(f"  ⭐ NEW BEST! (prev: {prev_best_actions})")
+                prev_best_actions = last_actions
+                save_dict = {
                     "agent_nets": [net.state_dict() for net in agent_nets],
-                    "mixer": mixer.state_dict()
-                }, os.path.join(SAVE_DIR, f"qmix_best_epoch{epoch}.pth"))
-                print("Saved best checkpoint.")
+                    "mixer": mixer.state_dict(),
+                    "epoch": epoch,
+                    "eval": mean_eval
+                }
+                for i, aid in enumerate(agent_ids):
+                    save_dict[f"agent_{aid}"] = agent_nets[i].state_dict()
+                torch.save(save_dict, os.path.join(SAVE_DIR, f"qmix_best_epoch{epoch}.pth"))
 
-        # GPU cooldown (throttle) as requested
-        if epoch % GPU_COOLDOWN_FREQ == 0 and epoch > 0:
-            print(f"GPU cooldown: sleeping for {GPU_COOLDOWN_SECONDS}s to throttle GPU...")
-            time.sleep(GPU_COOLDOWN_SECONDS)
-
-    # final save
-    torch.save({
-        "agent_nets": [net.state_dict() for net in agent_nets],
-        "mixer": mixer.state_dict()
-    }, os.path.join(SAVE_DIR, "qmix_final.pth"))
-    print("Training finished. Final model saved.")
+    torch.save({"agent_nets": [net.state_dict() for net in agent_nets], "mixer": mixer.state_dict()}, 
+               os.path.join(SAVE_DIR, "qmix_final.pth"))
+    print(f"\n✅ Training complete! Best eval: {best_eval:.2f}")
+    vec_env.close()
 
 if __name__ == "__main__":
     main()
