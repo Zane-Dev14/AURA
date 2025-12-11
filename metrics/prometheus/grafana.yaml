@@ -1,4 +1,6 @@
-apiVersion: dashboard.grafana.app/v2beta1
+#import this shit into grafana
+
+apiVersion: dashboard.grafana.app/v2beta1 
 kind: Dashboard
 metadata:
   name: flask-monitoring

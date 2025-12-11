@@ -16,6 +16,7 @@ from prometheus_client import CONTENT_TYPE_LATEST
 from prometheus_client import ProcessCollector
 
 # Built-in collectors: CPU, memory, fds, start time, OS-level stats
+#processcollector wont work for windows (wasted an hour)
 
 
 
