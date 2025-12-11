@@ -13,6 +13,11 @@ api.config["MYSQL_DB"] = os.getenv("MYSQL_DB", "quotesdb")
 mysql = MySQL(api)
 from prometheus_client import Counter, generate_latest,Histogram
 from prometheus_client import CONTENT_TYPE_LATEST
+from prometheus_client import ProcessCollector
+
+# Built-in collectors: CPU, memory, fds, start time, OS-level stats
+
+
 
 REQUEST_COUNTER = Counter("api_requests_total", "Total API requests")
 REQUEST_LATENCY = Histogram(

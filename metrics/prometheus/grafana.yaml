@@ -1,0 +1,1113 @@
+apiVersion: dashboard.grafana.app/v2beta1
+kind: Dashboard
+metadata:
+  name: flask-monitoring
+  namespace: default
+  uid: 6xzg0y2YjJnyQMrsGqZZS0qeAPg8xHSPfv4XoUPGSLoX
+  resourceVersion: '1'
+  generation: 10
+  creationTimestamp: '2025-12-11T18:33:09Z'
+  labels:
+    grafana.app/deprecatedInternalID: '2'
+  annotations:
+    grafana.app/createdBy: user:df6e2uvh4axhcf
+    grafana.app/updatedBy: user:df6e2uvh4axhcf
+    grafana.app/updatedTimestamp: '2025-12-11T18:33:09Z'
+    grafana.app/saved-from-ui: Grafana v12.3.0 (20051fb1fc)
+spec:
+  annotations:
+    - kind: AnnotationQuery
+      spec:
+        builtIn: true
+        enable: true
+        hide: true
+        iconColor: rgba(0, 211, 255, 1)
+        name: Annotations & Alerts
+        query:
+          datasource:
+            name: grafana
+          group: grafana
+          kind: DataQuery
+          spec:
+            limit: 100
+            matchAny: false
+            tags: []
+            type: dashboard
+          version: v0
+  cursorSync: 'Off'
+  description: Flask Monitoring with StatsD
+  editable: true
+  elements:
+    panel-10:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+              - kind: PanelQuery
+                spec:
+                  hidden: false
+                  query:
+                    datasource:
+                      name: ef6e9ij8c4l4wb
+                    group: prometheus
+                    kind: DataQuery
+                    spec:
+                      editorMode: builder
+                      exemplar: true
+                      expr: >-
+                        http_request_duration_seconds_count{app_name="$app_name"}
+                      interval: ''
+                      legendFormat: '{{method}} {{endpoint}}'
+                      range: true
+                    version: v0
+                  refId: A
+            queryOptions: {}
+            transformations: []
+        description: ''
+        id: 10
+        links: []
+        title: Requests Count
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: palette-classic
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ''
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: line
+                  fillOpacity: 0
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 1
+                  pointSize: 5
+                  scaleDistribution:
+                    type: linear
+                  showPoints: auto
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: 'off'
+                thresholds:
+                  mode: absolute
+                  steps:
+                    - color: green
+                      value: 0
+                    - color: red
+                      value: 80
+              overrides: []
+            options:
+              legend:
+                calcs:
+                  - last
+                displayMode: list
+                placement: right
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: single
+                sort: none
+          version: 12.3.0
+    panel-17:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+              - kind: PanelQuery
+                spec:
+                  hidden: false
+                  query:
+                    datasource:
+                      name: ef6e9ij8c4l4wb
+                    group: prometheus
+                    kind: DataQuery
+                    spec:
+                      exemplar: true
+                      expr: >-
+                        sum(flask_request_status_total{app_name="$app_name",
+                        status=~"5.*"}) by(endpoint, method) /
+                        sum(flask_request_status_total{app_name="$app_name"})
+                        by(endpoint, method)
+                      interval: ''
+                      legendFormat: '{{method}} {{endpoint}} '
+                    version: v0
+                  refId: A
+            queryOptions: {}
+            transformations: []
+        description: ''
+        id: 17
+        links: []
+        title: Percent of 5xx Requests
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: palette-classic
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ''
+                  axisPlacement: auto
+                  axisSoftMax: 1
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: line
+                  fillOpacity: 0
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 1
+                  pointSize: 5
+                  scaleDistribution:
+                    type: linear
+                  showPoints: auto
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: area
+                thresholds:
+                  mode: percentage
+                  steps:
+                    - color: green
+                      value: 0
+                    - color: red
+                      value: 10
+                unit: percentunit
+              overrides: []
+            options:
+              legend:
+                calcs:
+                  - last
+                displayMode: list
+                placement: right
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: single
+                sort: none
+          version: 12.3.0
+    panel-19:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+              - kind: PanelQuery
+                spec:
+                  hidden: false
+                  query:
+                    datasource:
+                      name: ef6e9ij8c4l4wb
+                    group: prometheus
+                    kind: DataQuery
+                    spec:
+                      editorMode: builder
+                      exemplar: true
+                      expr: sum(api_requests_total)
+                      interval: ''
+                      legendFormat: ''
+                      range: true
+                    version: v0
+                  refId: A
+              - kind: PanelQuery
+                spec:
+                  hidden: false
+                  query:
+                    datasource:
+                      name: ef6e9ij8c4l4wb
+                    group: prometheus
+                    kind: DataQuery
+                    spec:
+                      editorMode: builder
+                      exemplar: false
+                      expr: sum(api_requests_total)
+                      instant: true
+                      legendFormat: __auto
+                      range: false
+                    version: v0
+                  refId: B
+            queryOptions:
+              timeFrom: 24h
+            transformations:
+              - kind: seriesToRows
+                spec:
+                  id: seriesToRows
+                  options: {}
+              - kind: sortBy
+                spec:
+                  id: sortBy
+                  options:
+                    fields: {}
+                    sort:
+                      - field: Time
+        description: ''
+        id: 19
+        links: []
+        title: Total Requests
+        vizConfig:
+          group: stat
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: thresholds
+                thresholds:
+                  mode: absolute
+                  steps:
+                    - color: green
+                      value: 0
+              overrides: []
+            options:
+              colorMode: value
+              graphMode: area
+              justifyMode: auto
+              orientation: auto
+              percentChangeColorMode: standard
+              reduceOptions:
+                calcs:
+                  - lastNotNull
+                fields: ''
+                values: false
+              showPercentChange: false
+              textMode: auto
+              wideLayout: true
+          version: 12.3.0
+    panel-2:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+              - kind: PanelQuery
+                spec:
+                  hidden: false
+                  query:
+                    datasource:
+                      name: ef6e9ij8c4l4wb
+                    group: prometheus
+                    kind: DataQuery
+                    spec:
+                      exemplar: true
+                      expr: >-
+                        sum(flask_request_status_total{app_name="$app_name",
+                        status=~"2.*"}) by(endpoint, method) /
+                        sum(flask_request_status_total{app_name="$app_name"})
+                        by(endpoint, method)
+                      interval: ''
+                      legendFormat: '{{method}} {{endpoint}} '
+                    version: v0
+                  refId: A
+            queryOptions: {}
+            transformations: []
+        description: ''
+        id: 2
+        links: []
+        title: Percent of 2xx Requests
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: palette-classic
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ''
+                  axisPlacement: auto
+                  axisSoftMax: 1
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: line
+                  fillOpacity: 0
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 1
+                  pointSize: 5
+                  scaleDistribution:
+                    type: linear
+                  showPoints: auto
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: area
+                thresholds:
+                  mode: percentage
+                  steps:
+                    - color: dark-red
+                      value: 0
+                    - color: green
+                      value: 80
+                unit: percentunit
+              overrides: []
+            options:
+              legend:
+                calcs:
+                  - last
+                displayMode: list
+                placement: right
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: single
+                sort: none
+          version: 12.3.0
+    panel-21:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+              - kind: PanelQuery
+                spec:
+                  hidden: false
+                  query:
+                    datasource:
+                      name: ef6e9ij8c4l4wb
+                    group: prometheus
+                    kind: DataQuery
+                    spec:
+                      editorMode: builder
+                      exemplar: true
+                      expr: >-
+                        sum (flask_request_status_total{app_name="$app_name"})
+                        by(status)
+                      interval: ''
+                      legendFormat: 'HTTP Status: {{status}}'
+                      range: true
+                    version: v0
+                  refId: A
+              - kind: PanelQuery
+                spec:
+                  hidden: false
+                  query:
+                    datasource:
+                      name: ef6e9ij8c4l4wb
+                    group: prometheus
+                    kind: DataQuery
+                    spec:
+                      editorMode: code
+                      exemplar: false
+                      expr: >-
+                        sum (flask_request_status_total{app_name="$app_name"})
+                        by(status)
+                      instant: true
+                      legendFormat: 'HTTP Status: {{status}}'
+                      range: false
+                    version: v0
+                  refId: B
+            queryOptions:
+              timeFrom: 24h
+            transformations:
+              - kind: seriesToRows
+                spec:
+                  id: seriesToRows
+                  options: {}
+              - kind: sortBy
+                spec:
+                  id: sortBy
+                  options:
+                    fields: {}
+                    sort:
+                      - field: Time
+              - kind: partitionByValues
+                spec:
+                  id: partitionByValues
+                  options:
+                    fields:
+                      - Metric
+                    keepFields: false
+        description: ''
+        id: 21
+        links: []
+        title: Requests Per Status Code
+        vizConfig:
+          group: stat
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: thresholds
+                thresholds:
+                  mode: absolute
+                  steps:
+                    - color: green
+                      value: 0
+              overrides: []
+            options:
+              colorMode: value
+              graphMode: area
+              justifyMode: auto
+              orientation: auto
+              percentChangeColorMode: standard
+              reduceOptions:
+                calcs:
+                  - lastNotNull
+                fields: ''
+                values: false
+              showPercentChange: false
+              textMode: auto
+              wideLayout: true
+          version: 12.3.0
+    panel-23:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+              - kind: PanelQuery
+                spec:
+                  hidden: false
+                  query:
+                    datasource:
+                      name: ef6e9ij8c4l4wb
+                    group: prometheus
+                    kind: DataQuery
+                    spec:
+                      editorMode: builder
+                      exemplar: true
+                      expr: >-
+                        http_request_duration_seconds_sum /
+                        http_request_duration_seconds_count
+                      interval: ''
+                      legendFormat: '{{method}} {{endpoint}}'
+                      range: true
+                    version: v0
+                  refId: A
+            queryOptions: {}
+            transformations: []
+        description: ''
+        id: 23
+        links: []
+        title: Requests Average Duration
+        vizConfig:
+          group: bargauge
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: continuous-GrYlRd
+                thresholds:
+                  mode: absolute
+                  steps:
+                    - color: green
+                      value: 0
+                unit: s
+              overrides: []
+            options:
+              displayMode: lcd
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: false
+              maxVizHeight: 300
+              minVizHeight: 16
+              minVizWidth: 8
+              namePlacement: auto
+              orientation: horizontal
+              reduceOptions:
+                calcs:
+                  - lastNotNull
+                fields: ''
+                values: false
+              showUnfilled: true
+              sizing: auto
+              valueMode: color
+          version: 12.3.0
+    panel-24:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+              - kind: PanelQuery
+                spec:
+                  hidden: false
+                  query:
+                    datasource:
+                      name: ef6e9ij8c4l4wb
+                    group: prometheus
+                    kind: DataQuery
+                    spec:
+                      editorMode: builder
+                      exemplar: false
+                      expr: process_cpu_seconds_total
+                      format: table
+                      instant: false
+                      interval: ''
+                      legendFormat: ''
+                      range: true
+                    version: v0
+                  refId: A
+            queryOptions: {}
+            transformations: []
+        description: ''
+        id: 24
+        links: []
+        title: CPU seconds
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: palette-classic
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ''
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: line
+                  fillOpacity: 0
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 1
+                  pointSize: 5
+                  scaleDistribution:
+                    type: linear
+                  showPoints: auto
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: 'off'
+                thresholds:
+                  mode: absolute
+                  steps:
+                    - color: green
+                      value: 0
+                    - color: red
+                      value: 80
+              overrides: []
+            options:
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: single
+                sort: none
+          version: 12.3.0
+    panel-4:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+              - kind: PanelQuery
+                spec:
+                  hidden: false
+                  query:
+                    datasource:
+                      name: ef6e9ij8c4l4wb
+                    group: prometheus
+                    kind: DataQuery
+                    spec:
+                      editorMode: builder
+                      exemplar: true
+                      expr: >-
+                        http_request_duration_seconds_sum /
+                        http_request_duration_seconds_count
+                      interval: ''
+                      legendFormat: '{{endpoint}}'
+                      range: true
+                    version: v0
+                  refId: A
+            queryOptions: {}
+            transformations:
+              - kind: seriesToColumns
+                spec:
+                  id: seriesToColumns
+                  options: {}
+        description: ''
+        id: 4
+        links: []
+        title: Request Average Duration
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: palette-classic
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ''
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: line
+                  fillOpacity: 0
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 1
+                  pointSize: 5
+                  scaleDistribution:
+                    type: linear
+                  showPoints: auto
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: 'off'
+                thresholds:
+                  mode: absolute
+                  steps:
+                    - color: green
+                      value: 0
+                    - color: red
+                      value: 80
+                unit: s
+              overrides: []
+            options:
+              legend:
+                calcs:
+                  - last
+                displayMode: table
+                placement: right
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: single
+                sort: none
+          version: 12.3.0
+    panel-6:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+              - kind: PanelQuery
+                spec:
+                  hidden: false
+                  query:
+                    datasource:
+                      name: ef6e9ij8c4l4wb
+                    group: prometheus
+                    kind: DataQuery
+                    spec:
+                      editorMode: builder
+                      exemplar: true
+                      expr: rate(http_request_duration_seconds_count[1m])
+                      interval: ''
+                      legendFormat: '{{endpoint}}'
+                      range: true
+                    version: v0
+                  refId: A
+            queryOptions: {}
+            transformations: []
+        description: ''
+        id: 6
+        links: []
+        title: Requests Per Second
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: palette-classic
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ''
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: line
+                  fillOpacity: 0
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 1
+                  pointSize: 5
+                  scaleDistribution:
+                    type: linear
+                  showPoints: auto
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: 'off'
+                thresholds:
+                  mode: absolute
+                  steps:
+                    - color: green
+                      value: 0
+                    - color: red
+                      value: 80
+                unit: reqps
+              overrides: []
+            options:
+              legend:
+                calcs:
+                  - last
+                displayMode: list
+                placement: right
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: single
+                sort: none
+          version: 12.3.0
+    panel-8:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+              - kind: PanelQuery
+                spec:
+                  hidden: false
+                  query:
+                    datasource:
+                      name: ef6e9ij8c4l4wb
+                    group: prometheus
+                    kind: DataQuery
+                    spec:
+                      editorMode: builder
+                      exemplar: false
+                      expr: http_request_duration_seconds{quantile="0.5"}
+                      format: table
+                      instant: true
+                      interval: ''
+                      legendFormat: ''
+                    version: v0
+                  refId: PR 50
+              - kind: PanelQuery
+                spec:
+                  hidden: false
+                  query:
+                    datasource:
+                      name: ef6e9ij8c4l4wb
+                    group: prometheus
+                    kind: DataQuery
+                    spec:
+                      editorMode: builder
+                      exemplar: false
+                      expr: http_request_duration_seconds{quantile="0.9"}
+                      format: table
+                      instant: true
+                      interval: ''
+                      legendFormat: ''
+                    version: v0
+                  refId: PR 90
+              - kind: PanelQuery
+                spec:
+                  hidden: false
+                  query:
+                    datasource:
+                      name: ef6e9ij8c4l4wb
+                    group: prometheus
+                    kind: DataQuery
+                    spec:
+                      editorMode: builder
+                      exemplar: false
+                      expr: http_request_duration_seconds{quantile="0.99"}
+                      format: table
+                      instant: true
+                      interval: ''
+                      legendFormat: ''
+                    version: v0
+                  refId: PR 99
+            queryOptions: {}
+            transformations:
+              - kind: seriesToColumns
+                spec:
+                  id: seriesToColumns
+                  options:
+                    byField: endpoint
+              - kind: organize
+                spec:
+                  id: organize
+                  options:
+                    excludeByName:
+                      Time 1: true
+                      Time 2: true
+                      Time 3: true
+                      'Value #PR 50': false
+                      __name__ 1: true
+                      __name__ 2: true
+                      __name__ 3: true
+                      app_name 1: true
+                      app_name 2: true
+                      app_name 3: true
+                      instance 1: true
+                      instance 2: true
+                      instance 3: true
+                      job 1: true
+                      job 2: true
+                      job 3: true
+                      method 1: false
+                      method 2: true
+                      method 3: true
+                      quantile 1: true
+                      quantile 2: true
+                      quantile 3: true
+                    indexByName: {}
+                    renameByName:
+                      'Value #PR 50': PR 50 (s)
+                      'Value #PR 90': PR 90 (s)
+                      'Value #PR 99': PR 99 (s)
+                      method 1: Method
+        description: ''
+        id: 8
+        links: []
+        title: Request Duration Distribution
+        vizConfig:
+          group: table
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: thresholds
+                custom:
+                  align: auto
+                  cellOptions:
+                    type: auto
+                  footer:
+                    reducers: []
+                  inspect: false
+                thresholds:
+                  mode: absolute
+                  steps:
+                    - color: green
+                      value: 0
+                    - color: red
+                      value: 80
+                unit: s
+              overrides: []
+            options:
+              cellHeight: sm
+              showHeader: true
+          version: 12.3.0
+  layout:
+    kind: GridLayout
+    spec:
+      items:
+        - kind: GridLayoutItem
+          spec:
+            element:
+              kind: ElementReference
+              name: panel-19
+            height: 8
+            width: 6
+            x: 0
+            'y': 0
+        - kind: GridLayoutItem
+          spec:
+            element:
+              kind: ElementReference
+              name: panel-21
+            height: 8
+            width: 6
+            x: 6
+            'y': 0
+        - kind: GridLayoutItem
+          spec:
+            element:
+              kind: ElementReference
+              name: panel-23
+            height: 8
+            width: 12
+            x: 12
+            'y': 0
+        - kind: GridLayoutItem
+          spec:
+            element:
+              kind: ElementReference
+              name: panel-24
+            height: 8
+            width: 12
+            x: 0
+            'y': 8
+        - kind: GridLayoutItem
+          spec:
+            element:
+              kind: ElementReference
+              name: panel-6
+            height: 8
+            width: 12
+            x: 12
+            'y': 8
+        - kind: GridLayoutItem
+          spec:
+            element:
+              kind: ElementReference
+              name: panel-10
+            height: 8
+            width: 12
+            x: 0
+            'y': 16
+        - kind: GridLayoutItem
+          spec:
+            element:
+              kind: ElementReference
+              name: panel-8
+            height: 8
+            width: 12
+            x: 12
+            'y': 16
+        - kind: GridLayoutItem
+          spec:
+            element:
+              kind: ElementReference
+              name: panel-4
+            height: 8
+            width: 12
+            x: 0
+            'y': 24
+        - kind: GridLayoutItem
+          spec:
+            element:
+              kind: ElementReference
+              name: panel-17
+            height: 8
+            width: 12
+            x: 12
+            'y': 24
+        - kind: GridLayoutItem
+          spec:
+            element:
+              kind: ElementReference
+              name: panel-2
+            height: 8
+            width: 12
+            x: 0
+            'y': 32
+  links: []
+  liveNow: false
+  preload: false
+  tags: []
+  timeSettings:
+    autoRefresh: 5s
+    autoRefreshIntervals:
+      - 5s
+      - 10s
+      - 30s
+      - 1m
+      - 5m
+      - 15m
+      - 30m
+      - 1h
+      - 2h
+      - 1d
+    fiscalYearStartMonth: 0
+    from: now-5m
+    hideTimepicker: false
+    timezone: ''
+    to: now
+  title: Flask Monitoring
+  variables:
+    - kind: QueryVariable
+      spec:
+        allowCustomValue: true
+        current:
+          text: ''
+          value: ''
+        definition: label_values(flask_info{}, app_name)
+        hide: dontHide
+        includeAll: false
+        label: Application Name
+        multi: false
+        name: app_name
+        options: []
+        query:
+          datasource:
+            name: ef6e9ij8c4l4wb
+          group: prometheus
+          kind: DataQuery
+          spec:
+            query: label_values(flask_info{}, app_name)
+            refId: StandardVariableQuery
+          version: v0
+        refresh: onDashboardLoad
+        regex: ''
+        skipUrlSync: false
+        sort: disabled
+status: {}
