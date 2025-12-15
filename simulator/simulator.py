@@ -537,29 +537,35 @@ class K8sSimulator:
     
     def _compute_reward(self, flapping: float) -> float:
         """
-        Reward function: -(cost + SLA_violations + flapping)
-        
+        Reward function: -(cost + SLA_violations + flapping + over-scaling)
         Agents learn to minimize this
         """
         # Cost: replica-seconds
         total_replicas = sum(len(svc.pods) for svc in self.services.values())
         cost = total_replicas * self.decision_interval * 0.001  # $0.001 per replica per step
-        
+
         # SLA violations: how much over threshold
         sla_violations = 0.0
         for svc in self.services.values():
             if svc.p95_latency_ms > self.sla_threshold_ms:
                 violation = (svc.p95_latency_ms - self.sla_threshold_ms) / self.sla_threshold_ms
                 sla_violations += violation
-        
-        # Total penalty (negative reward)
+
+        # Over-scaling penalty: penalize if replicas > 6 (mid-range)
+        over_scaling_penalty = 0.0
+        for svc in self.services.values():
+            if svc.replicas_desired > 6:  # mid-range threshold
+                over_scaling_penalty += (svc.replicas_desired - 6) * 0.7
+
         reward = -(
             self.alpha * cost +
             self.beta * sla_violations +
-            self.gamma * flapping
+            self.gamma * flapping +
+            0.3 * over_scaling_penalty   # NEW penalty
         )
-        
+
         return reward
+
 
 
 # QUICK TEST
