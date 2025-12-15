@@ -3,7 +3,7 @@ from flask_mysqldb import MySQL
 import os,time
 
 api = Flask(__name__)
-
+SERVICE="api"
 # MySQL configurations
 api.config["MYSQL_HOST"] = os.getenv("MYSQL_HOST", "db")
 api.config["MYSQL_USER"] = os.getenv("MYSQL_USER", "user")
@@ -20,22 +20,23 @@ from prometheus_client import ProcessCollector
 
 
 
-REQUEST_COUNTER = Counter("api_requests_total", "Total API requests")
+REQUEST_COUNTER = Counter("http_requests_total", "Total API requests",["service"])
 REQUEST_LATENCY = Histogram(
     "http_request_duration_seconds",
     "Request latency",
-    ["endpoint"]
+    ["endpoint","service"]
+    
 )
 
 @api.before_request
 def before_request():
-    REQUEST_COUNTER.inc()
+    REQUEST_COUNTER.labels(SERVICE).inc()
     g.start_time=time.time()
 
 @api.after_request
 def after_request_(response):
     latency = time.time() - g.start_time
-    REQUEST_LATENCY.labels(endpoint=request.path).observe(latency)
+    REQUEST_LATENCY.labels(request.path,SERVICE).observe(latency)
     return response
 
 @api.route("/metrics")
