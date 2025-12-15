@@ -1,0 +1,13 @@
+[2025-11-02 17:50:00] Found 1 resource files and 1 RT files.
+[2025-11-02 17:50:00] Resource files (first 5): MSResource_0.csv
+[2025-11-02 17:50:00] RT files (first 5): MSRTQps_0.csv
+[2025-11-02 17:50:00] Starting scan to find top microservice (memory-safe).
+[2025-11-02 17:50:00] Scanning RT file: data/MSRTQps/MSRTQps_0.csv
+[2025-11-02 17:51:43] Top microservice: 19bf629d5c9ca676ae5571e1ff501172ef1dbcedc1b77e304200534a2eccdf02
+[2025-11-02 17:51:43] Building dataset for microservice: 19bf629d5c9ca676ae5571e1ff501172ef1dbcedc1b77e304200534a2eccdf02
+[2025-11-02 17:51:43] Processing Resource file: data/MSResource/MSResource_0.csv (RT candidates: 1)
+[2025-11-02 17:51:43]   ⚠️ No CPU/MEM columns found in resource chunk 0 of data/MSResource/MSResource_0.csv. Continuing.
+[2025-11-02 17:53:04]   ⚠️ No CPU/MEM columns found in resource chunk 1 of data/MSResource/MSResource_0.csv. Continuing.
+[2025-11-02 17:54:01]   ⚠️ No CPU/MEM columns found in resource chunk 2 of data/MSResource/MSResource_0.csv. Continuing.
+[2025-11-02 17:55:37]   ⚠️ No CPU/MEM columns found in resource chunk 3 of data/MSResource/MSResource_0.csv. Continuing.
+[2025-11-02 17:57:05]   ⚠️ No CPU/MEM columns found in resource chunk 4 of data/MSResource/MSResource_0.csv. Continuing.
