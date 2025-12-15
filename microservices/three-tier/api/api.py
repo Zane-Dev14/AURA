@@ -1,6 +1,6 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request,g
 from flask_mysqldb import MySQL
-import os
+import os,time
 
 api = Flask(__name__)
 
@@ -11,14 +11,32 @@ api.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD", "password")
 api.config["MYSQL_DB"] = os.getenv("MYSQL_DB", "quotesdb")
 
 mysql = MySQL(api)
-from prometheus_client import Counter, generate_latest
+from prometheus_client import Counter, generate_latest,Histogram
 from prometheus_client import CONTENT_TYPE_LATEST
+from prometheus_client import ProcessCollector
+
+# Built-in collectors: CPU, memory, fds, start time, OS-level stats
+#processcollector wont work for windows (wasted an hour)
+
+
 
 REQUEST_COUNTER = Counter("api_requests_total", "Total API requests")
+REQUEST_LATENCY = Histogram(
+    "http_request_duration_seconds",
+    "Request latency",
+    ["endpoint"]
+)
 
 @api.before_request
 def before_request():
     REQUEST_COUNTER.inc()
+    g.start_time=time.time()
+
+@api.after_request
+def after_request_(response):
+    latency = time.time() - g.start_time
+    REQUEST_LATENCY.labels(endpoint=request.path).observe(latency)
+    return response
 
 @api.route("/metrics")
 def metrics():
