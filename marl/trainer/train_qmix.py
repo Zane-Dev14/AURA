@@ -14,10 +14,26 @@ import random
 from collections import deque, namedtuple
 from typing import Dict, List
 
+import sys
+import os
+import yaml
+import torch
+import numpy as np
+from pathlib import Path
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+# Add project root to path
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+
+# Now import from marl package
+from marl.env import BoutiqueEnv
+from marl.policies import QMIXAgent
 
 # Replace these imports with your actual env module path
 from boutique_env import K8sAutoscaleEnv  # PettingZoo ParallelEnv wrapper you provided

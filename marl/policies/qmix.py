@@ -21,7 +21,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import multiprocessing as mp
 
-from boutique_env import K8sAutoscaleEnv
+from marl.env import BoutiqueEnv
 
 # -----------------------------
 # Hyperparameters
