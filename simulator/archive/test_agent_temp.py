@@ -32,48 +32,64 @@ class QNetwork(nn.Module):
 # =====================================================
 # HPA Policy (K8s Horizontal Pod Autoscaler baseline)
 # =====================================================
+from collections import defaultdict, deque
+
 class HPAPolicy:
-    def __init__(self, target_cpu=0.7, tolerance=0.1,
-                 scale_down_stabilization=5*60,  # seconds
-                 max_up_step=2, max_down_step=1,
-                 min_replicas=1, max_replicas=10):
+    def __init__(self,
+                 target_cpu=0.7,
+                 tolerance=0.1,
+                 scale_down_stabilization=300,
+                 min_replicas=1,
+                 max_replicas=10):
+        
         self.target_cpu = target_cpu
         self.tolerance = tolerance
         self.scale_down_stabilization = scale_down_stabilization
-        self.max_up_step = max_up_step
-        self.max_down_step = max_down_step
         self.min_replicas = min_replicas
         self.max_replicas = max_replicas
-        self.history = {}
+        
+        self.history = defaultdict(lambda: deque(maxlen=50))
     
     def get_actions(self, observations):
         now = time.time()
         actions = {}
+        
         for agent, obs in observations.items():
+            # Extract metrics
             cpu_util = obs[0] * 2.0
-            current = int(obs[9] * 20.0)
-            desired = self.history.get(agent, (now, current))[1]
-
-            ratio = cpu_util / self.target_cpu
-            if abs(ratio - 1.0) < self.tolerance:
-                # Within tolerance, do nothing
-                actions[agent] = current - 1
-                continue
+            current = int(round(obs[9] * 20.0))
             
-            raw_desired = int(np.ceil(current * ratio))
-            raw_desired = np.clip(raw_desired, self.min_replicas, self.max_replicas)
-
-            # Stabilization: don’t scale down too fast
-            last_t, last_desired = self.history.get(agent, (now, current))
-            if raw_desired < desired and (now - last_t) < self.scale_down_stabilization:
-                raw_desired = desired  # skip scale-down
-
-            raw_desired = int(np.clip(raw_desired, self.min_replicas, self.max_replicas))
-            actions[agent] = raw_desired - 1
-            self.history[agent] = (now, raw_desired)
+            # Step 1: Apply tolerance
+            ratio = cpu_util / self.target_cpu
+            if abs(1 - ratio) < self.tolerance:
+                desired = current
+            else:
+                desired = int(np.ceil(current * ratio))
+            
+            # Clamp to allowed range
+            desired = int(np.clip(desired, self.min_replicas, self.max_replicas))
+            
+            # Step 2: Stabilization window
+            hist = self.history[agent]
+            hist.append((now, desired))
+            
+            # Filter to window
+            cutoff = now - self.scale_down_stabilization
+            recent = [d for t, d in hist if t >= cutoff]
+            
+            if recent:
+                if desired < current:
+                    # Scale-down: use MAX from window
+                    desired = max(recent)
+                # Scale-up: immediate (0s stabilization)
+            
+            # Final clamp
+            desired = int(np.clip(desired, self.min_replicas, self.max_replicas))
+            
+            # Convert to action space [0-9] representing [1-10] replicas
+            actions[agent] = desired - 1
+        
         return actions
-
-
 # =====================================================
 # Policy Functions
 # =====================================================
