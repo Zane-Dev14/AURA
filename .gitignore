@@ -5,6 +5,19 @@ __pycache__/
 
 # C extensions
 *.so
+# logs
+logs/
+deployment/logs/
+
+# ML artifacts
+*.pth
+
+# Python
+__pycache__/
+.env
+
+# infra noise
+infra/kube-prometheus/
 
 # Distribution / packaging
 .Python
