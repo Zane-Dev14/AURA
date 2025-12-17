@@ -1,32 +1,62 @@
+import json
+import glob
+import os
 import matplotlib.pyplot as plt
 
 # -------------------------------------------------------
-# ✅  Optional: use a clean Matplotlib style
-# (Not seaborn, but a built-in Matplotlib stylesheet)
+# ✅ Find latest evaluation_results_*.json
+# -------------------------------------------------------
+json_files = sorted(
+    glob.glob("evaluation_results_*.json"),
+    key=os.path.getmtime
+)
+
+if not json_files:
+    raise FileNotFoundError("No evaluation_results_*.json files found")
+
+latest_file = json_files[-1]
+print(f"📊 Using results file: {latest_file}")
+
+with open(latest_file, "r") as f:
+    results = json.load(f)
+
+# -------------------------------------------------------
+# ✅ Methods (ordered for plotting)
+# -------------------------------------------------------
+methods = [
+    "HPA",
+    "Single-Agent DQN",
+    "Per-Agent DQN",
+    "QMIX"
+]
+
+display_names = [
+    "HPA",
+    "Basic Alibaba Model",
+    "Per-Agent DQN",
+    "QMIX"
+]
+
+# -------------------------------------------------------
+# ✅ Extract metrics dynamically
+# -------------------------------------------------------
+mean_reward = [results[m]["mean_reward"] for m in methods]
+std_reward  = [results[m]["std_reward"]  for m in methods]
+
+mean_cost = [results[m]["mean_cost"] for m in methods]
+std_cost  = [results[m]["std_cost"]  for m in methods]
+
+mean_sla = [results[m]["mean_sla"] for m in methods]
+std_sla  = [results[m]["std_sla"]  for m in methods]
+
+mean_latency = [results[m]["mean_latency"] for m in methods]
+std_latency  = [results[m]["std_latency"]  for m in methods]
+
+# -------------------------------------------------------
+# ✅ Matplotlib styling (unchanged)
 # -------------------------------------------------------
 plt.style.use("ggplot")
 
-# -------------------------------------------------------
-# ✅ Updated Names
-# -------------------------------------------------------
-methods = ["HPA", "Basic Alibaba Cluster Model", "Per-Agent DQN", "QMIX"]
-
-# Data
-mean_reward = [-282.9997, -3996.107, -975.652, -206.747]
-std_reward = [62.46, 840.58, 211.38, 10.34]
-
-mean_cost = [26.585, 29.519, 45.98, 20.291]
-std_cost = [4.496, 5.595, 0.849, 1.924]
-
-mean_sla = [1.4, 41.9, 2.5, 2.1]
-std_sla = [0.91, 20.03, 0.67, 0.3]
-
-mean_latency = [38.87, 615.89, 52.91, 51.90]
-std_latency = [11.75, 284.14, 2.93, 3.99]
-
-# -------------------------------------------------------
-# ✅ Global Aesthetic Improvements
-# -------------------------------------------------------
 plt.rcParams.update({
     "figure.figsize": (10, 6),
     "font.size": 13,
@@ -42,14 +72,13 @@ plt.rcParams.update({
 })
 
 # -------------------------------------------------------
-# ✅ Function for clean, modern bar charts
+# ✅ Generic bar plot function
 # -------------------------------------------------------
 def create_bar_plot(title, ylabel, means, stds):
     fig, ax = plt.subplots()
-    
-    bars = ax.bar(methods, means, yerr=stds, capsize=6, linewidth=1.2)
-    
-    # Increase bar edge sharpness
+
+    bars = ax.bar(display_names, means, yerr=stds, capsize=6)
+
     for b in bars:
         b.set_edgecolor("black")
         b.set_linewidth(1.3)
@@ -57,15 +86,38 @@ def create_bar_plot(title, ylabel, means, stds):
     ax.set_title(title, pad=20)
     ax.set_xlabel("Method")
     ax.set_ylabel(ylabel)
-    
+
     plt.xticks(rotation=15, ha="right")
     plt.tight_layout()
     plt.show()
 
 # -------------------------------------------------------
-# ✅ Generate all improved figures
+# ✅ Generate plots
 # -------------------------------------------------------
-create_bar_plot("Mean Reward (with Standard Deviation)", "Reward", mean_reward, std_reward)
-create_bar_plot("Mean Cost (with Standard Deviation)", "Cost", mean_cost, std_cost)
-create_bar_plot("Mean SLA Violations (with Standard Deviation)", "SLA Violations", mean_sla, std_sla)
-create_bar_plot("Mean Latency (with Standard Deviation)", "Latency (ms)", mean_latency, std_latency)
+create_bar_plot(
+    "Mean Reward (with Standard Deviation)",
+    "Reward",
+    mean_reward,
+    std_reward
+)
+
+create_bar_plot(
+    "Mean Cost (with Standard Deviation)",
+    "Cost ($)",
+    mean_cost,
+    std_cost
+)
+
+create_bar_plot(
+    "Mean SLA Violations (with Standard Deviation)",
+    "SLA Violations",
+    mean_sla,
+    std_sla
+)
+
+create_bar_plot(
+    "Mean P95 Latency (with Standard Deviation)",
+    "Latency (ms)",
+    mean_latency,
+    std_latency
+)
