@@ -1,8 +1,9 @@
 import numpy as np
 import requests
 from collections import deque
+import os
+PROM_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:9090")
 
-PROM_URL = "http://localhost:9090"
 OBS_DIM = 16
 
 CPU_HISTORY = {}
@@ -13,53 +14,131 @@ def _hist(store, key):
         store[key] = deque([0.0, 0.0], maxlen=2)
     return store[key]
 
+import math
+
 def q(query: str) -> float:
     try:
-        r = requests.get(f"{PROM_URL}/api/v1/query", params={"query": query}, timeout=5).json()
+        r = requests.get(
+            f"{PROM_URL}/api/v1/query",
+            params={"query": query},
+            timeout=5
+        ).json()
+
         if r["data"]["result"]:
-            return float(r["data"]["result"][0]["value"][1])
-    except:
+            v = float(r["data"]["result"][0]["value"][1])
+            if math.isnan(v) or math.isinf(v):
+                return 0.0
+            return v
+    except Exception:
         pass
+
     return 0.0
+
 
 def collect_metrics(service: str, ns="default"):
     return {
         "cpu": q(f'''
-          sum(rate(container_cpu_usage_seconds_total{{namespace="{ns}",pod=~"{service}-.*",container="{service}"}}[1m]))
+          sum(rate(container_cpu_usage_seconds_total{{
+            namespace="{ns}",
+            pod=~"{service}-.*",
+            container="{service}"
+          }}[1m]))
           /
-          sum(kube_pod_container_resource_limits{{namespace="{ns}",pod=~"{service}-.*",container="{service}",resource="cpu"}})
+          sum(kube_pod_container_resource_limits{{
+            namespace="{ns}",
+            pod=~"{service}-.*",
+            container="{service}",
+            resource="cpu"
+          }})
         '''),
+
         "memory": q(f'''
-          sum(container_memory_working_set_bytes{{namespace="{ns}",pod=~"{service}-.*",container="{service}"}})
+          sum(container_memory_working_set_bytes{{
+            namespace="{ns}",
+            pod=~"{service}-.*",
+            container="{service}"
+          }})
           /
-          sum(kube_pod_container_resource_limits{{namespace="{ns}",pod=~"{service}-.*",container="{service}",resource="memory"}})
+          sum(kube_pod_container_resource_limits{{
+            namespace="{ns}",
+            pod=~"{service}-.*",
+            container="{service}",
+            resource="memory"
+          }})
         '''),
+
+        # ✅ REAL ingress RPS
         "rps": q(f'''
-          sum(rate(envoy_http_downstream_rq_total{{namespace="{ns}",envoy_cluster_name="{service}"}}[1m]))
+          sum(rate(envoy_http_downstream_rq_total{{
+            namespace="{ns}",
+            service="{service}",
+            envoy_http_conn_manager_prefix="ingress"
+          }}[1m]))
         '''),
+
+        # ✅ Active ingress queue
         "queue": q(f'''
-          avg(envoy_http_downstream_rq_active{{namespace="{ns}",envoy_cluster_name="{service}"}})
+          avg(envoy_http_downstream_rq_active{{
+            namespace="{ns}",
+            service="{service}",
+            envoy_http_conn_manager_prefix="ingress"
+          }})
         '''),
+
+        # ✅ Latencies in ms
         "p50": q(f'''
-          histogram_quantile(0.50,
-            sum(rate(envoy_http_downstream_rq_time_bucket{{namespace="{ns}",envoy_cluster_name="{service}"}}[1m])) by (le)
+          histogram_quantile(
+            0.50,
+            sum(rate(envoy_http_downstream_rq_time_bucket{{
+              namespace="{ns}",
+              service="{service}",
+              envoy_http_conn_manager_prefix="ingress"
+            }}[1m])) by (le)
           ) * 1000
         '''),
+
         "p95": q(f'''
-          histogram_quantile(0.95,
-            sum(rate(envoy_http_downstream_rq_time_bucket{{namespace="{ns}",envoy_cluster_name="{service}"}}[1m])) by (le)
+          histogram_quantile(
+            0.95,
+            sum(rate(envoy_http_downstream_rq_time_bucket{{
+              namespace="{ns}",
+              service="{service}",
+              envoy_http_conn_manager_prefix="ingress"
+            }}[1m])) by (le)
           ) * 1000
         '''),
+
         "p99": q(f'''
-          histogram_quantile(0.99,
-            sum(rate(envoy_http_downstream_rq_time_bucket{{namespace="{ns}",envoy_cluster_name="{service}"}}[1m])) by (le)
+          histogram_quantile(
+            0.99,
+            sum(rate(envoy_http_downstream_rq_time_bucket{{
+              namespace="{ns}",
+              service="{service}",
+              envoy_http_conn_manager_prefix="ingress"
+            }}[1m])) by (le)
           ) * 1000
         '''),
+
         "error": q(f'''
-          sum(rate(envoy_http_downstream_rq_xx{{namespace="{ns}",envoy_cluster_name="{service}",envoy_response_code_class="5"}}[1m]))
+          sum(rate(envoy_http_downstream_rq_xx{{
+            namespace="{ns}",
+            service="{service}",
+            envoy_http_conn_manager_prefix="ingress",
+            envoy_response_code_class="5"
+          }}[1m]))
         '''),
-        "desired": q(f'kube_deployment_spec_replicas{{deployment="{service}"}}'),
-        "ready": q(f'sum(kube_pod_status_ready{{pod=~"{service}-.*",condition="true"}})')
+
+        "desired": q(
+          f'kube_deployment_spec_replicas{{deployment="{service}"}}'
+        ),
+
+        "ready": q(f'''
+          sum(kube_pod_status_ready{{
+            namespace="{ns}",
+            pod=~"{service}-.*",
+            condition="true"
+          }})
+        ''')
     }
 
 def build_observation(service: str, m: dict, max_rep=10):

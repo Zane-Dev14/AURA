@@ -12,21 +12,29 @@ spec:
     metadata:
       labels:
         app: db
+        metrics: envoy
     spec:
       containers:
       - name: db
-        image: mysql:8.0
+        image: project-db:local
+        imagePullPolicy: IfNotPresent
         env:
-        - name: MYSQL_ROOT_PASSWORD
-          value: "rootpassword"
-        - name: MYSQL_DATABASE
-          value: "quotesdb"
-        - name: MYSQL_USER
-          value: "user"
-        - name: MYSQL_PASSWORD
-          value: "password"
+          - name: MYSQL_DATABASE
+            value: quotesdb
+          - name: MYSQL_ROOT_PASSWORD
+            value: root
+          - name: MYSQL_USER
+            value: user
+          - name: MYSQL_PASSWORD
+            value: password
         ports:
-        - containerPort: 3306
+          - containerPort: 3306
+            name: mysql-internal
+        volumeMounts:
+          - name: mysql-data
+            mountPath: /var/lib/mysql
+          - name: mysql-init
+            mountPath: /docker-entrypoint-initdb.d
         resources:
           requests:
             cpu: 100m
@@ -34,40 +42,57 @@ spec:
           limits:
             cpu: 500m
             memory: 1Gi
+
+      - name: envoy
+        image: envoyproxy/envoy:v1.29-latest
+        command:
+          - /usr/local/bin/envoy
+          - -c
+          - /etc/envoy/envoy.yaml
+          - --service-cluster
+          - db
+        ports:
+          - containerPort: 3307
+            name: mysql
+          - containerPort: 9901
+            name: envoy-admin
         volumeMounts:
-        - name: mysql-init
-          mountPath: /docker-entrypoint-initdb.d
+          - name: envoy-config
+            mountPath: /etc/envoy
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
       volumes:
-      - name: mysql-init
-        configMap:
-          name: mysql-init-script
+        - name: envoy-config
+          configMap:
+            name: envoy-config-db
+        - name: mysql-init
+          configMap:
+            name: mysql-init-script
+        - name: mysql-data
+          emptyDir: {}
+
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: db
   namespace: default
+  labels:
+    app: db
+    metrics: envoy
 spec:
   selector:
     app: db
   ports:
-  - name: mysql
-    port: 3306
-    targetPort: 3306
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: mysql-init-script
-  namespace: default
-data:
-  init.sql: |
-    USE quotesdb;
-    CREATE TABLE IF NOT EXISTS quotes (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      text VARCHAR(255) NOT NULL,
-      author VARCHAR(100)
-    );
-    INSERT INTO quotes (text, author) VALUES 
-      ('The only way to do great work is to love what you do.', 'Steve Jobs'),
-      ('Innovation distinguishes between a leader and a follower.', 'Steve Jobs');
+    - name: mysql
+      port: 3306
+      targetPort: 3307
+    - name: metrics
+      port: 9901
+      targetPort: 9901
