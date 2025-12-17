@@ -14,23 +14,33 @@ def _hist(store, key):
         store[key] = deque([0.0, 0.0], maxlen=2)
     return store[key]
 
+import math
+
 def q(query: str) -> float:
     try:
-        r = requests.get(f"{PROM_URL}/api/v1/query", params={"query": query}, timeout=5).json()
+        r = requests.get(
+            f"{PROM_URL}/api/v1/query",
+            params={"query": query},
+            timeout=5
+        ).json()
+
         if r["data"]["result"]:
-            return float(r["data"]["result"][0]["value"][1])
-    except:
+            v = float(r["data"]["result"][0]["value"][1])
+            if math.isnan(v) or math.isinf(v):
+                return 0.0
+            return v
+    except Exception:
         pass
+
     return 0.0
 
+
 def collect_metrics(service: str, ns="default"):
-    # Map service → actual Envoy cluster name
+    # Map service → envoy cluster
     if service == "db":
         cluster = "mysql_cluster"
-        listener = "0.0.0.0_3307"
     else:
         cluster = "api"
-        listener = "0.0.0.0_8080"
 
     return {
         "cpu": q(f'''
@@ -45,45 +55,56 @@ def collect_metrics(service: str, ns="default"):
           sum(kube_pod_container_resource_limits{{namespace="{ns}",pod=~"{service}-.*",container="{service}",resource="memory"}})
         '''),
 
+        # ✅ REAL ingress RPS
         "rps": q(f'''
           sum(rate(envoy_http_downstream_rq_total{{
             namespace="{ns}",
-            envoy_cluster_name="{cluster}",
-            envoy_listener_address="{listener}"
+            service="{service}",
+            envoy_http_conn_manager_prefix="ingress"
           }}[1m]))
         '''),
 
+        # ✅ Active queue (ingress only)
         "queue": q(f'''
           avg(envoy_http_downstream_rq_active{{
             namespace="{ns}",
-            envoy_cluster_name="{cluster}",
-            envoy_listener_address="{listener}"
+            service="{service}",
+            envoy_http_conn_manager_prefix="ingress"
           }})
         '''),
 
+        # ✅ p50 latency (ms)
         "p50": q(f'''
-          histogram_quantile(0.50,
+          histogram_quantile(
+            0.50,
             sum(rate(envoy_http_downstream_rq_time_bucket{{
               namespace="{ns}",
-              envoy_cluster_name="{cluster}"
+              service="{service}",
+              envoy_http_conn_manager_prefix="ingress"
             }}[1m])) by (le)
           ) * 1000
         '''),
 
+        # ✅ p95 latency (ms)
         "p95": q(f'''
-          histogram_quantile(0.95,
+          histogram_quantile(
+            0.95,
             sum(rate(envoy_http_downstream_rq_time_bucket{{
               namespace="{ns}",
-              envoy_cluster_name="{cluster}"
+              service="{service}",
+              envoy_http_conn_manager_prefix="ingress"
             }}[1m])) by (le)
           ) * 1000
         '''),
 
+        # ✅ p99 latency (ms)
         "p99": q(f'''
-          histogram_quantile(0.99,
+          histogram_quantile(
+            0.99,
             sum(rate(envoy_http_downstream_rq_time_bucket{{
               namespace="{ns}",
-              envoy_cluster_name="{cluster}"
+              service="{service}",
+              envoy_http_conn_manager_prefix="ingress"
             }}[1m])) by (le)
           ) * 1000
         '''),
@@ -91,18 +112,23 @@ def collect_metrics(service: str, ns="default"):
         "error": q(f'''
           sum(rate(envoy_http_downstream_rq_xx{{
             namespace="{ns}",
-            envoy_cluster_name="{cluster}",
+            service="{service}",
+            envoy_http_conn_manager_prefix="ingress",
             envoy_response_code_class="5"
           }}[1m]))
         '''),
 
-        "desired": q(f'kube_deployment_spec_replicas{{deployment="{service}"}}'),
+        "desired": q(
+            f'kube_deployment_spec_replicas{{deployment="{service}"}}'
+        ),
 
         "ready": q(f'''
-          sum(kube_pod_status_ready{{namespace="{ns}",pod=~"{service}-.*",condition="true"}})
+          sum(kube_pod_status_ready{{
+            namespace="{ns}",
+            pod=~"{service}-.*",
+            condition="true"
+          }})
         ''')
-
-
     }
 
 def build_observation(service: str, m: dict, max_rep=10):
