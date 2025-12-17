@@ -4,6 +4,11 @@ import numpy as np
 import sys, os
 import json
 import time
+# =====================================================
+# Path resolution (FIXES ALL RELATIVE PATH ISSUES)
+# =====================================================
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SIMULATOR_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from boutique_env import K8sAutoscaleEnv
@@ -104,8 +109,9 @@ def hpa_actions(hpa_policy, observations):
     return hpa_policy.get_actions(observations)
 
 
-def load_agent(path="../agent.pth"):
-    """Load single trained agent"""
+def load_agent(path=None):
+    if path is None:
+        path = os.path.join(SIMULATOR_DIR, "agent.pth")
     model = QNetwork().to("cpu")
     model.load_state_dict(torch.load(path, map_location="cpu"))
     model.eval()
@@ -118,7 +124,7 @@ def load_all_agents():
     agents = ["api", "app", "db"]
     models = {}
     
-    base_path = "../trained_agents"
+    base_path = os.path.join(SIMULATOR_DIR,"..","marl", "trained_agents")
     if not os.path.exists(base_path):
         print(f"⚠️  Could not find directory: {base_path}. Skipping Per-Agent DQN.")
         return None
@@ -141,7 +147,8 @@ def load_all_agents():
 
 def load_qmix():
     """Load QMIX trained models from simulator/qmix_checkpoints/qmix_final.pth"""
-    qmix_path = os.path.join("..", "qmix_checkpoints", "qmix_final.pth")
+    qmix_path = os.path.join(SIMULATOR_DIR,"..","marl", "qmix_checkpoints", "qmix_final.pth")
+
 
     if not os.path.exists(qmix_path):
         print(f"⚠️  QMIX checkpoint not found at {qmix_path}")
@@ -205,8 +212,9 @@ def run_episode(title, policy_fn, policy_obj=None, seed=0, verbose=False):
     print(f"\n{'='*70}")
     print(f"{title}")
     print(f"{'='*70}\n")
-    
-    env = K8sAutoscaleEnv("../config.yaml")
+    config_path = os.path.join(SIMULATOR_DIR, "config.yaml")
+    env = K8sAutoscaleEnv(config_path)
+
     observations, infos = env.reset(seed=seed)
 
     total_reward = 0

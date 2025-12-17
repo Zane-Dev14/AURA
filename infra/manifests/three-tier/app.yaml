@@ -11,26 +11,55 @@ spec:
     metadata:
       labels:
         app: app
+        metrics: envoy
     spec:
       containers:
-        - name: app
-          image: project-app:local   # build from ./app
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: API_URL
-              value: "http://api:5001"
-          ports:
-            - containerPort: 5002
+      - name: app
+        image: project-app:local
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: API_URL
+            value: "http://api:8080"
+        ports:
+          - containerPort: 5002
+
+      - name: envoy
+        image: envoyproxy/envoy:v1.29-latest
+        command:
+          - /bin/sh
+          - -c
+          - |
+            sleep 5
+            exec /usr/local/bin/envoy \
+              -c /etc/envoy/envoy.yaml \
+              --service-cluster app \
+              --log-level info
+        ports:
+          - containerPort: 8080
+          - containerPort: 9901
+        volumeMounts:
+          - name: envoy-config
+            mountPath: /etc/envoy
+
+      volumes:
+        - name: envoy-config
+          configMap:
+            name: envoy-config-app
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: app
+  labels:
+    app: app
+    metrics: envoy
 spec:
-  type: NodePort
   selector:
     app: app
   ports:
-    - port: 5002
-      targetPort: 5002
-      nodePort: 30080
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: metrics
+      port: 9901
+      targetPort: 9901
