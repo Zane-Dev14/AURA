@@ -6,7 +6,7 @@ data:
   envoy.yaml: |
     static_resources:
       listeners:
-      - name: listener_mysql
+      - name: mysql_listener
         address:
           socket_address:
             address: 0.0.0.0
@@ -17,21 +17,21 @@ data:
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
               stat_prefix: mysql
-              cluster: db
+              cluster: mysql_cluster
 
       clusters:
-      - name: db
+      - name: mysql_cluster
         connect_timeout: 1s
         type: STATIC
         load_assignment:
-          cluster_name: db
+          cluster_name: mysql_cluster
           endpoints:
           - lb_endpoints:
             - endpoint:
                 address:
                   socket_address:
                     address: 127.0.0.1
-                    port_value: 3306
+                    port_value: 3306   # 🔴 MySQL default
 
     admin:
       address:
