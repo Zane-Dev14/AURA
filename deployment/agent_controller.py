@@ -7,7 +7,6 @@ import requests
 import csv
 import numpy as np
 from datetime import datetime
-from builder import collect_metrics, build_observation
 
 # -------------------------------------------------
 # Force project root into PYTHONPATH
@@ -19,7 +18,7 @@ sys.path.insert(0, PROJECT_ROOT)
 # Imports
 # -------------------------------------------------
 from marl.inference import AuraInference
-from deployment.builder import build_observation
+from deployment.builder import collect_metrics, build_observation
 
 # -------------------------------------------------
 # Config
@@ -32,7 +31,7 @@ CHECKPOINT_DIR = os.environ.get(
 PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:9090")
 NAMESPACE = "default"
 
-SERVICES = ["api", "app"]
+SERVICES = ["api", "app","db"]
 
 MIN_REPLICAS = 1
 MAX_REPLICAS = 10

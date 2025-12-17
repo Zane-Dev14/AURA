@@ -34,7 +34,8 @@ data:
       clusters:
       - name: api
         connect_timeout: 0.25s
-        type: STATIC
+        type: STRICT_DNS
+        lb_policy: ROUND_ROBIN
         load_assignment:
           cluster_name: api
           endpoints:
@@ -42,8 +43,9 @@ data:
             - endpoint:
                 address:
                   socket_address:
-                    address: 127.0.0.1
-                    port_value: 5001
+                    address: api.default.svc.cluster.local
+                    port_value: 8080
+
 
     admin:
       address:
