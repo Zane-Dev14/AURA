@@ -1,13 +1,10 @@
 FROM python:3.11-slim
 
 WORKDIR /app
-
-COPY . /app
-
+COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-EXPOSE 5002 
+COPY . .
 
-# 5002 this is for local dev
-
-CMD ["python", "app.py"]
+# IMPORTANT
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5002", "app:app"]

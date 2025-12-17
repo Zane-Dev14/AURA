@@ -36,23 +36,35 @@ def q(query: str) -> float:
 
 
 def collect_metrics(service: str, ns="default"):
-    # Map service → envoy cluster
-    if service == "db":
-        cluster = "mysql_cluster"
-    else:
-        cluster = "api"
-
     return {
         "cpu": q(f'''
-          sum(rate(container_cpu_usage_seconds_total{{namespace="{ns}",pod=~"{service}-.*",container="{service}"}}[1m]))
+          sum(rate(container_cpu_usage_seconds_total{{
+            namespace="{ns}",
+            pod=~"{service}-.*",
+            container="{service}"
+          }}[1m]))
           /
-          sum(kube_pod_container_resource_limits{{namespace="{ns}",pod=~"{service}-.*",container="{service}",resource="cpu"}})
+          sum(kube_pod_container_resource_limits{{
+            namespace="{ns}",
+            pod=~"{service}-.*",
+            container="{service}",
+            resource="cpu"
+          }})
         '''),
 
         "memory": q(f'''
-          sum(container_memory_working_set_bytes{{namespace="{ns}",pod=~"{service}-.*",container="{service}"}})
+          sum(container_memory_working_set_bytes{{
+            namespace="{ns}",
+            pod=~"{service}-.*",
+            container="{service}"
+          }})
           /
-          sum(kube_pod_container_resource_limits{{namespace="{ns}",pod=~"{service}-.*",container="{service}",resource="memory"}})
+          sum(kube_pod_container_resource_limits{{
+            namespace="{ns}",
+            pod=~"{service}-.*",
+            container="{service}",
+            resource="memory"
+          }})
         '''),
 
         # ✅ REAL ingress RPS
@@ -64,7 +76,7 @@ def collect_metrics(service: str, ns="default"):
           }}[1m]))
         '''),
 
-        # ✅ Active queue (ingress only)
+        # ✅ Active ingress queue
         "queue": q(f'''
           avg(envoy_http_downstream_rq_active{{
             namespace="{ns}",
@@ -73,7 +85,7 @@ def collect_metrics(service: str, ns="default"):
           }})
         '''),
 
-        # ✅ p50 latency (ms)
+        # ✅ Latencies in ms
         "p50": q(f'''
           histogram_quantile(
             0.50,
@@ -85,7 +97,6 @@ def collect_metrics(service: str, ns="default"):
           ) * 1000
         '''),
 
-        # ✅ p95 latency (ms)
         "p95": q(f'''
           histogram_quantile(
             0.95,
@@ -97,7 +108,6 @@ def collect_metrics(service: str, ns="default"):
           ) * 1000
         '''),
 
-        # ✅ p99 latency (ms)
         "p99": q(f'''
           histogram_quantile(
             0.99,
@@ -119,7 +129,7 @@ def collect_metrics(service: str, ns="default"):
         '''),
 
         "desired": q(
-            f'kube_deployment_spec_replicas{{deployment="{service}"}}'
+          f'kube_deployment_spec_replicas{{deployment="{service}"}}'
         ),
 
         "ready": q(f'''
