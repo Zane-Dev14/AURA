@@ -11,37 +11,10 @@ api.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD", "password")
 api.config["MYSQL_DB"] = os.getenv("MYSQL_DB", "quotesdb")
 
 mysql = MySQL(api)
-from prometheus_client import Counter, generate_latest,Histogram
-from prometheus_client import CONTENT_TYPE_LATEST
-from prometheus_client import ProcessCollector
 
 # Built-in collectors: CPU, memory, fds, start time, OS-level stats
 #processcollector wont work for windows (wasted an hour)
 
-
-
-REQUEST_COUNTER = Counter("http_requests_total", "Total API requests",["service"])
-REQUEST_LATENCY = Histogram(
-    "http_request_duration_seconds",
-    "Request latency",
-    ["endpoint","service"]
-    
-)
-
-@api.before_request
-def before_request():
-    REQUEST_COUNTER.labels(SERVICE).inc()
-    g.start_time=time.time()
-
-@api.after_request
-def after_request_(response):
-    latency = time.time() - g.start_time
-    REQUEST_LATENCY.labels(request.path,SERVICE).observe(latency)
-    return response
-
-@api.route("/metrics")
-def metrics():
-    return generate_latest(), 200, {"Content-Type": CONTENT_TYPE_LATEST}
 
 
 @api.route("/api/quotes", methods=["GET"])

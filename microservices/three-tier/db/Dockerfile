@@ -1,6 +1,8 @@
-FROM mysql:latest
+FROM mysql:8.0
+
 ENV MYSQL_DATABASE=quotesdb \
     MYSQL_ROOT_PASSWORD=root \
     MYSQL_USER=user \
     MYSQL_PASSWORD=password
+
 COPY init.sql /docker-entrypoint-initdb.d/

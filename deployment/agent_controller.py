@@ -18,7 +18,7 @@ sys.path.insert(0, PROJECT_ROOT)
 # Imports
 # -------------------------------------------------
 from marl.inference import AuraInference
-from deployment.builder import build_observation
+from deployment.builder import collect_metrics, build_observation
 
 # -------------------------------------------------
 # Config
@@ -31,7 +31,7 @@ CHECKPOINT_DIR = os.environ.get(
 PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:9090")
 NAMESPACE = "default"
 
-SERVICES = ["api", "app", "db"]
+SERVICES = ["api", "app","db"]
 
 MIN_REPLICAS = 1
 MAX_REPLICAS = 10
@@ -45,52 +45,52 @@ LOG_FILE = os.path.join(LOG_DIR, "shadow_decisions.csv")
 # -------------------------------------------------
 # Prometheus helper
 # -------------------------------------------------
-def prom(query: str) -> float:
-    try:
-        r = requests.get(
-            f"{PROMETHEUS_URL}/api/v1/query",
-            params={"query": query},
-            timeout=5,
-        ).json()
-        if r.get("data", {}).get("result"):
-            return float(r["data"]["result"][0]["value"][1])
-    except Exception as e:
-        print("⚠️ Prometheus error:", e)
-    return 0.0
+# def prom(query: str) -> float:
+#     try:
+#         r = requests.get(
+#             f"{PROMETHEUS_URL}/api/v1/query",
+#             params={"query": query},
+#             timeout=5,
+#         ).json()
+#         if r.get("data", {}).get("result"):
+#             return float(r["data"]["result"][0]["value"][1])
+#     except Exception as e:
+#         print("⚠️ Prometheus error:", e)
+#     return 0.0
 
 # -------------------------------------------------
 # Metric collection (raw Prometheus → dict)
 # -------------------------------------------------
-def collect_metrics(service: str) -> dict:
-    return {
-        "cpu": prom(
-            f'rate(container_cpu_usage_seconds_total{{pod=~"{service}-.*"}}[1m])'
-        ),
-        "memory": prom(
-            f'container_memory_working_set_bytes{{pod=~"{service}-.*"}}'
-        ) / 1e9,
-        "rps": prom(
-            f'rate(http_requests_total{{service="{service}"}}[1m])'
-        ),
-        "error_rate": prom(
-            f'rate(http_requests_total{{service="{service}",status=~"5.."}}[1m])'
-        ),
-        "p50": prom(
-            f'histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{{service="{service}"}}[5m])) by (le))'
-        ),
-        "p95": prom(
-            f'histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{{service="{service}"}}[5m])) by (le))'
-        ),
-        "p99": prom(
-            f'histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{{service="{service}"}}[5m])) by (le))'
-        ),
-        "desired": prom(
-            f'kube_deployment_spec_replicas{{deployment="{service}"}}'
-        ),
-        "ready": prom(
-            f'kube_deployment_status_replicas_available{{deployment="{service}"}}'
-        ),
-    }
+# def collect_metrics(service: str) -> dict:
+#     return {
+#         "cpu": prom(
+#             f'rate(container_cpu_usage_seconds_total{{pod=~"{service}-.*"}}[1m])'
+#         ),
+#         "memory": prom(
+#             f'container_memory_working_set_bytes{{pod=~"{service}-.*"}}'
+#         ) / 1e9,
+#         "rps": prom(
+#             f'rate(http_requests_total{{service="{service}"}}[1m])'
+#         ),
+#         "error_rate": prom(
+#             f'rate(http_requests_total{{service="{service}",status=~"5.."}}[1m])'
+#         ),
+#         "p50": prom(
+#             f'histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{{service="{service}"}}[5m])) by (le))'
+#         ),
+#         "p95": prom(
+#             f'histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{{service="{service}"}}[5m])) by (le))'
+#         ),
+#         "p99": prom(
+#             f'histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{{service="{service}"}}[5m])) by (le))'
+#         ),
+#         "desired": prom(
+#             f'kube_deployment_spec_replicas{{deployment="{service}"}}'
+#         ),
+#         "ready": prom(
+#             f'kube_deployment_status_replicas_available{{deployment="{service}"}}'
+#         ),
+#     }
 
 # -------------------------------------------------
 # Scaling helper
