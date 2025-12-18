@@ -71,7 +71,7 @@ def collect_metrics(service: str, ns="default"):
         "rps": q(f'''
           sum(rate(envoy_http_downstream_rq_total{{
             namespace="{ns}",
-            service="{service}",
+            job="{service}",
             envoy_http_conn_manager_prefix="ingress"
           }}[1m]))
         '''),
@@ -80,7 +80,7 @@ def collect_metrics(service: str, ns="default"):
         "queue": q(f'''
           avg(envoy_http_downstream_rq_active{{
             namespace="{ns}",
-            service="{service}",
+            job="{service}",
             envoy_http_conn_manager_prefix="ingress"
           }})
         '''),
@@ -91,7 +91,7 @@ def collect_metrics(service: str, ns="default"):
             0.50,
             sum(rate(envoy_http_downstream_rq_time_bucket{{
               namespace="{ns}",
-              service="{service}",
+              job="{service}",
               envoy_http_conn_manager_prefix="ingress"
             }}[1m])) by (le)
           ) * 1000
@@ -102,7 +102,7 @@ def collect_metrics(service: str, ns="default"):
             0.95,
             sum(rate(envoy_http_downstream_rq_time_bucket{{
               namespace="{ns}",
-              service="{service}",
+              job="{service}",
               envoy_http_conn_manager_prefix="ingress"
             }}[1m])) by (le)
           ) * 1000
@@ -113,7 +113,7 @@ def collect_metrics(service: str, ns="default"):
             0.99,
             sum(rate(envoy_http_downstream_rq_time_bucket{{
               namespace="{ns}",
-              service="{service}",
+              job="{service}",
               envoy_http_conn_manager_prefix="ingress"
             }}[1m])) by (le)
           ) * 1000
@@ -122,7 +122,7 @@ def collect_metrics(service: str, ns="default"):
         "error": q(f'''
           sum(rate(envoy_http_downstream_rq_xx{{
             namespace="{ns}",
-            service="{service}",
+            job="{service}",
             envoy_http_conn_manager_prefix="ingress",
             envoy_response_code_class="5"
           }}[1m]))

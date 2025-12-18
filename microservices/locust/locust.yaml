@@ -15,6 +15,7 @@ spec:
       containers:
         - name: locust
           image: project-locust:local
+          imagePullPolicy: Always   
           command: ["locust"]
           args:
             - "-H"

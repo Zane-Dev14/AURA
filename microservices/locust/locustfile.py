@@ -10,7 +10,3 @@ class User(HttpUser):
     @task(2)
     def read_quotes(self):
         self.client.get("/api/quotes")
-
-    @task(1)
-    def health(self):
-        self.client.get("/health")
