@@ -30,12 +30,10 @@ data:
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
-
       clusters:
       - name: api
         connect_timeout: 0.2s
-        type: STRICT_DNS
-        lb_policy: ROUND_ROBIN
+        type: STATIC           # ✅ Changed from STRICT_DNS
         load_assignment:
           cluster_name: api
           endpoints:
@@ -43,9 +41,8 @@ data:
             - endpoint:
                 address:
                   socket_address:
-                    address: api.default.svc.cluster.local
-                    port_value: 8080
-
+                    address: 127.0.0.1    # ✅ Changed: route to LOCAL container
+                    port_value: 5001      # ✅ Changed: API container port
 
     admin:
       address:
