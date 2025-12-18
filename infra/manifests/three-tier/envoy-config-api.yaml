@@ -33,7 +33,7 @@ data:
 
       clusters:
       - name: api
-        connect_timeout: 0.25s
+        connect_timeout: 0.2s
         type: STRICT_DNS
         lb_policy: ROUND_ROBIN
         load_assignment:
