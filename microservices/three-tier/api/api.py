@@ -9,7 +9,10 @@ api.config["MYSQL_HOST"] = os.getenv("MYSQL_HOST", "db")
 api.config["MYSQL_USER"] = os.getenv("MYSQL_USER", "user")
 api.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD", "password")
 api.config["MYSQL_DB"] = os.getenv("MYSQL_DB", "quotesdb")
-
+api.config["MYSQL_CURSORCLASS"] = "DictCursor"
+api.config["MYSQL_POOL_NAME"] = "mypool"
+api.config["MYSQL_POOL_SIZE"] = 20
+api.config["MYSQL_POOL_RESET_SESSION"] = True
 mysql = MySQL(api)
 
 # Built-in collectors: CPU, memory, fds, start time, OS-level stats

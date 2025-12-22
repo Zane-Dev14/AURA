@@ -15,13 +15,20 @@ spec:
     spec:
       containers:
       - name: app
-        image: project-app:v4
+        image: project-app:v8
         imagePullPolicy: Never
         env:
           - name: API_URL
             value: "http://api:8080"
         ports:
           - containerPort: 5002
+        resources:
+            requests:
+                cpu: 500m
+                memory: 512Mi
+            limits:
+                cpu: 1000m
+                memory: 1Gi
 
       - name: envoy
         image: envoyproxy/envoy:v1.29-latest
@@ -37,6 +44,14 @@ spec:
         ports:
           - containerPort: 8080
           - containerPort: 9901
+        resources:
+            requests:
+                cpu: 100m
+                memory: 128Mi
+            limits:
+                cpu: 500m
+                memory: 256Mi
+
         volumeMounts:
           - name: envoy-config
             mountPath: /etc/envoy

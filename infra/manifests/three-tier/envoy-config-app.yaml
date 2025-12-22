@@ -11,39 +11,49 @@ data:
           socket_address:
             address: 0.0.0.0
             port_value: 8080
+        per_connection_buffer_limit_bytes: 32768
         filter_chains:
         - filters:
           - name: envoy.filters.network.http_connection_manager
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
               stat_prefix: ingress
+              common_http_protocol_options:
+                max_requests_per_connection: 50
+                idle_timeout: 300s
               route_config:
                 name: local_route
                 virtual_hosts:
                 - name: app
                   domains: ["*"]
                   routes:
-                    - match:
-                        prefix: "/api"
-                      route:
-                        cluster: api
-
-                    # 🔹 App UI (catch-all LAST)
-                    - match:
-                        prefix: "/"
-                      route:
-                        cluster: app
-
+                  - match:
+                      prefix: "/api"
+                    route:
+                      cluster: api
+                      retry_policy:
+                        retry_on: "5xx"
+                        num_retries: 1
+                  - match:
+                      prefix: "/"
+                    route:
+                      cluster: app
               http_filters:
               - name: envoy.filters.http.router
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
       clusters:
-      # App container
       - name: app
         connect_timeout: 0.25s
         type: STATIC
+        circuit_breakers:
+          thresholds:
+          - priority: DEFAULT
+            max_connections: 512
+            max_pending_requests: 512
+            max_requests: 512
+            max_retries: 3
         load_assignment:
           cluster_name: app
           endpoints:
@@ -54,11 +64,17 @@ data:
                     address: 127.0.0.1
                     port_value: 5002
 
-      # API service
       - name: api
         connect_timeout: 0.25s
         type: STRICT_DNS
         lb_policy: ROUND_ROBIN
+        circuit_breakers:
+          thresholds:
+          - priority: DEFAULT
+            max_connections: 512
+            max_pending_requests: 512
+            max_requests: 512
+            max_retries: 3
         load_assignment:
           cluster_name: api
           endpoints:

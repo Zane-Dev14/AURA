@@ -1,0 +1,3 @@
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled

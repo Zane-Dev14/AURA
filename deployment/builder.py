@@ -8,7 +8,14 @@ OBS_DIM = 16
 
 CPU_HISTORY = {}
 RPS_HISTORY = {}
+PREV_RPS = {}
 
+def build_observation(service: str, m: dict, max_rep=10):
+    global PREV_RPS
+
+    # Track RPS trend
+    rps_delta = m["rps"] - PREV_RPS.get(service, m["rps"])
+    PREV_RPS[service] = m["rps"]
 def _hist(store, key):
     if key not in store:
         store[key] = deque([0.0, 0.0], maxlen=2)
@@ -151,12 +158,16 @@ def build_observation(service: str, m: dict, max_rep=10):
     cpu_h.append(m["cpu"])
     rps_h.append(m["rps"])
 
+    p50_clamped = min(m["p50"], 5000)
+    p95_clamped = min(m["p95"], 10000)
+    p99_clamped = min(m["p99"], 15000)
+
     return np.array([
         min(m["cpu"]/2,1),
         min(m["memory"]/2,1),
-        min(m["p50"]/100,2),
-        min(m["p95"]/500,2),
-        min(m["p99"]/1000,2),
+        np.log1p(p50_clamped) / np.log1p(5000),    # ✅ Log scale
+        np.log1p(p95_clamped) / np.log1p(10000),   # ✅ Log scale
+        np.log1p(p99_clamped) / np.log1p(15000),   # ✅ Log scale
         min(m["rps"]/500,2),
         min(m["error"],1),
         min(m["queue"]/100,2),
