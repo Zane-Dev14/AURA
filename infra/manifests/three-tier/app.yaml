@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: project-app:v8
+        image: project-app:gevent
         imagePullPolicy: Never
         env:
           - name: API_URL

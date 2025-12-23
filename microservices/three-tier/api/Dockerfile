@@ -17,6 +17,11 @@ COPY . .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-EXPOSE 5001
+EXPOSE 5001 
 
-CMD ["gunicorn", "api:api", "--workers", "4", "--timeout", "60", "--bind", "0.0.0.0:5001"]
+CMD ["gunicorn", "api:api", \
+     "--worker-class", "gevent", \
+     "--workers", "2", \
+     "--worker-connections", "500", \
+     "--timeout", "60", \
+     "--bind", "0.0.0.0:5001"]
