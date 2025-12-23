@@ -2,20 +2,13 @@ import numpy as np
 import requests
 from collections import deque
 import os
-PROM_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:9090")
 
+PROM_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:9090")
 OBS_DIM = 16
 
 CPU_HISTORY = {}
 RPS_HISTORY = {}
-PREV_RPS = {}
 
-def build_observation(service: str, m: dict, max_rep=10):
-    global PREV_RPS
-
-    # Track RPS trend
-    rps_delta = m["rps"] - PREV_RPS.get(service, m["rps"])
-    PREV_RPS[service] = m["rps"]
 def _hist(store, key):
     if key not in store:
         store[key] = deque([0.0, 0.0], maxlen=2)
@@ -38,11 +31,89 @@ def q(query: str) -> float:
             return v
     except Exception:
         pass
-
     return 0.0
 
 
 def collect_metrics(service: str, ns="default"):
+    # Ingress RPS (ground truth)
+    rps = q(f'''
+      sum(rate(envoy_http_downstream_rq_total{{
+        namespace="{ns}",
+        job="{service}",
+        envoy_http_conn_manager_prefix="ingress"
+      }}[1m]))
+    ''')
+
+    # Always-safe average latency (ms)
+    avg_latency = q(f'''
+      sum(rate(envoy_http_downstream_rq_time_sum{{
+        namespace="{ns}",
+        job="{service}",
+        envoy_http_conn_manager_prefix="ingress"
+      }}[1m]))
+      /
+      sum(rate(envoy_http_downstream_rq_total{{
+        namespace="{ns}",
+        job="{service}",
+        envoy_http_conn_manager_prefix="ingress"
+      }}[1m]))
+    ''')
+    
+    # ✅ FIX: Safety floor
+    if avg_latency == 0.0:
+        avg_latency = 5.0  # reasonable default: 5ms
+
+    # Quantiles only if traffic is sufficient
+    if rps > 50:
+        p50 = q(f'''
+          histogram_quantile(
+            0.50,
+            sum by (le) (
+              increase(envoy_http_downstream_rq_time_bucket{{
+                namespace="{ns}",
+                job="{service}",
+                envoy_http_conn_manager_prefix="ingress"
+              }}[2m])
+            )
+          )
+        ''')
+
+        p95 = q(f'''
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              increase(envoy_http_downstream_rq_time_bucket{{
+                namespace="{ns}",
+                job="{service}",
+                envoy_http_conn_manager_prefix="ingress"
+              }}[2m])
+            )
+          )
+        ''')
+
+        p99 = q(f'''
+          histogram_quantile(
+            0.99,
+            sum by (le) (
+              increase(envoy_http_downstream_rq_time_bucket{{
+                namespace="{ns}",
+                job="{service}",
+                envoy_http_conn_manager_prefix="ingress"
+              }}[2m])
+            )
+          )
+        ''')
+    else:
+        # Low-traffic safe approximation
+        p50 = avg_latency
+        p95 = avg_latency * 2.5
+        p99 = avg_latency * 4.0
+
+    # NaN → sane fallback
+    if p50 == 0.0: p50 = avg_latency
+    if p95 == 0.0: p95 = avg_latency * 2.5
+    if p99 == 0.0: p99 = avg_latency * 4.0
+
     return {
         "cpu": q(f'''
           sum(rate(container_cpu_usage_seconds_total{{
@@ -74,16 +145,8 @@ def collect_metrics(service: str, ns="default"):
           }})
         '''),
 
-        # ✅ REAL ingress RPS
-        "rps": q(f'''
-          sum(rate(envoy_http_downstream_rq_total{{
-            namespace="{ns}",
-            job="{service}",
-            envoy_http_conn_manager_prefix="ingress"
-          }}[1m]))
-        '''),
+        "rps": rps,
 
-        # ✅ Active ingress queue
         "queue": q(f'''
           avg(envoy_http_downstream_rq_active{{
             namespace="{ns}",
@@ -92,39 +155,10 @@ def collect_metrics(service: str, ns="default"):
           }})
         '''),
 
-        # ✅ Latencies in ms
-        "p50": q(f'''
-          histogram_quantile(
-            0.50,
-            sum(rate(envoy_http_downstream_rq_time_bucket{{
-              namespace="{ns}",
-              job="{service}",
-              envoy_http_conn_manager_prefix="ingress"
-            }}[1m])) by (le)
-          ) * 1000
-        '''),
-
-        "p95": q(f'''
-          histogram_quantile(
-            0.95,
-            sum(rate(envoy_http_downstream_rq_time_bucket{{
-              namespace="{ns}",
-              job="{service}",
-              envoy_http_conn_manager_prefix="ingress"
-            }}[1m])) by (le)
-          ) * 1000
-        '''),
-
-        "p99": q(f'''
-          histogram_quantile(
-            0.99,
-            sum(rate(envoy_http_downstream_rq_time_bucket{{
-              namespace="{ns}",
-              job="{service}",
-              envoy_http_conn_manager_prefix="ingress"
-            }}[1m])) by (le)
-          ) * 1000
-        '''),
+        # Latency in ms — NO MULTIPLIERS
+        "p50": p50,
+        "p95": p95,
+        "p99": p99,
 
         "error": q(f'''
           sum(rate(envoy_http_downstream_rq_xx{{
@@ -135,9 +169,7 @@ def collect_metrics(service: str, ns="default"):
           }}[1m]))
         '''),
 
-        "desired": q(
-          f'kube_deployment_spec_replicas{{deployment="{service}"}}'
-        ),
+        "desired": q(f'kube_deployment_spec_replicas{{deployment="{service}"}}'),
 
         "ready": q(f'''
           sum(kube_pod_status_ready{{
@@ -147,6 +179,7 @@ def collect_metrics(service: str, ns="default"):
           }})
         ''')
     }
+
 
 def build_observation(service: str, m: dict, max_rep=10):
     cpu_h = _hist(CPU_HISTORY, service)
@@ -163,19 +196,19 @@ def build_observation(service: str, m: dict, max_rep=10):
     p99_clamped = min(m["p99"], 15000)
 
     return np.array([
-        min(m["cpu"]/2,1),
-        min(m["memory"]/2,1),
-        np.log1p(p50_clamped) / np.log1p(5000),    # ✅ Log scale
-        np.log1p(p95_clamped) / np.log1p(10000),   # ✅ Log scale
-        np.log1p(p99_clamped) / np.log1p(15000),   # ✅ Log scale
-        min(m["rps"]/500,2),
-        min(m["error"],1),
-        min(m["queue"]/100,2),
+        min(m["cpu"]/2, 1),
+        min(m["memory"]/2, 1),
+        np.log1p(p50_clamped) / np.log1p(5000),
+        np.log1p(p95_clamped) / np.log1p(10000),
+        np.log1p(p99_clamped) / np.log1p(15000),
+        min(m["rps"]/500, 2),
+        min(m["error"], 1),
+        min(m["queue"]/100, 2),
         np.tanh(rps_d/50),
         m["desired"]/max_rep,
         m["ready"]/max_rep,
-        m["ready"]/max(m["desired"],1),
-        min(cpu_h[-2]/2,1),
+        m["ready"]/max(m["desired"], 1),
+        min(cpu_h[-2]/2, 1),
         np.tanh(cpu_d/0.5),
         0.0,
         0.0
