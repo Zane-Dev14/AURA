@@ -180,7 +180,6 @@ def collect_metrics(service: str, ns="default"):
         ''')
     }
 
-
 def build_observation(service: str, m: dict, max_rep=10):
     cpu_h = _hist(CPU_HISTORY, service)
     rps_h = _hist(RPS_HISTORY, service)
@@ -191,25 +190,36 @@ def build_observation(service: str, m: dict, max_rep=10):
     cpu_h.append(m["cpu"])
     rps_h.append(m["rps"])
 
-    p50_clamped = min(m["p50"], 5000)
-    p95_clamped = min(m["p95"], 10000)
-    p99_clamped = min(m["p99"], 15000)
+    # === FIX 1: MATCH TRAINING DISTRIBUTION ===
+    p50_clamped = min(m["p50"], 500)
+    p95_clamped = min(m["p95"], 500)
+    p99_clamped = min(m["p99"], 1000)
+
+    # === FIX 2: GENERIC QUEUE PRESSURE (DOWNSTREAM) ===
+    # envoy_http_downstream_rq_active already IS the queue
+    downstream_pressure = min(m["queue"] / 500.0, 1.0)
+
+    # === FIX 3: PREDICTIVE RPS DERIVATIVE ===
+    if rps_d < 0 and m["error"] > 0.05:
+        rps_signal = abs(rps_d) * 2
+    else:
+        rps_signal = rps_d
 
     return np.array([
-        min(m["cpu"]/2, 1),
-        min(m["memory"]/2, 1),
-        np.log1p(p50_clamped) / np.log1p(5000),
-        np.log1p(p95_clamped) / np.log1p(10000),
-        np.log1p(p99_clamped) / np.log1p(15000),
-        min(m["rps"]/500, 2),
+        min(m["cpu"] / 2, 1),
+        min(m["memory"] / 2, 1),
+        np.log1p(p50_clamped) / np.log1p(500),
+        np.log1p(p95_clamped) / np.log1p(500),
+        np.log1p(p99_clamped) / np.log1p(1000),
+        min(m["rps"] / 500, 2),
         min(m["error"], 1),
-        min(m["queue"]/100, 2),
-        np.tanh(rps_d/50),
-        m["desired"]/max_rep,
-        m["ready"]/max_rep,
-        m["ready"]/max(m["desired"], 1),
-        min(cpu_h[-2]/2, 1),
-        np.tanh(cpu_d/0.5),
-        0.0,
-        0.0
+        min(m["queue"] / 100, 2),
+        np.tanh(rps_signal / 50),
+        m["desired"] / max_rep,
+        m["ready"] / max_rep,
+        m["ready"] / max(m["desired"], 1),
+        min(cpu_h[-2] / 2, 1),
+        np.tanh(cpu_d / 0.5),
+        downstream_pressure,
+        np.log1p(m["p95"]) / np.log1p(500)
     ], dtype=np.float32)

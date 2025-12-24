@@ -21,7 +21,7 @@ EXPOSE 5001
 
 CMD ["gunicorn", "api:api", \
      "--worker-class", "gevent", \
-     "--workers", "2", \
-     "--worker-connections", "500", \
+     "--workers", "4", \
+     "--worker-connections", "50", \
      "--timeout", "60", \
      "--bind", "0.0.0.0:5001"]
