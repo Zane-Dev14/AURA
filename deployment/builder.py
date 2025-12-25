@@ -25,19 +25,17 @@ def q(query: str) -> float:
             timeout=5
         ).json()
 
-        if r["data"]["result"]:
+        if r.get("data", {}).get("result"):
             v = float(r["data"]["result"][0]["value"][1])
-            if math.isnan(v) or math.isinf(v):
-                if query not in LAST_Q:
-                  return 0.0
-              return LAST_Q[query]
-
-            LAST_Q[query] = v
-            return v
+            if not (math.isnan(v) or math.isinf(v)):
+                LAST_Q[query] = v
+                return v
     except Exception:
         pass
 
+    # fallback to last known value
     return LAST_Q.get(query, 0.0)
+
 
 
 def collect_metrics(service: str, ns="default"):
@@ -111,35 +109,44 @@ def collect_metrics(service: str, ns="default"):
         "p50": q(f'''
           histogram_quantile(
             0.50,
-            sum(rate(envoy_http_downstream_rq_time_bucket{{
-              namespace="{ns}",
-              job="{service}",
-              envoy_http_conn_manager_prefix="ingress"
-            }}[1m])) by (le)
+            sum by (le) (
+              increase(envoy_http_downstream_rq_time_bucket{{
+                namespace="{ns}",
+                job="{service}",
+                envoy_http_conn_manager_prefix="ingress"
+              }}[1m])
+            )
           )
         '''),
+
 
         "p95": q(f'''
           histogram_quantile(
             0.95,
-            sum(rate(envoy_http_downstream_rq_time_bucket{{
-              namespace="{ns}",
-              job="{service}",
-              envoy_http_conn_manager_prefix="ingress"
-            }}[1m])) by (le)
+            sum by (le) (
+              increase(envoy_http_downstream_rq_time_bucket{{
+                namespace="{ns}",
+                job="{service}",
+                envoy_http_conn_manager_prefix="ingress"
+              }}[1m])
+            )
           )
         '''),
+
 
         "p99": q(f'''
           histogram_quantile(
             0.99,
-            sum(rate(envoy_http_downstream_rq_time_bucket{{
-              namespace="{ns}",
-              job="{service}",
-              envoy_http_conn_manager_prefix="ingress"
-            }}[1m])) by (le)
+            sum by (le) (
+              increase(envoy_http_downstream_rq_time_bucket{{
+                namespace="{ns}",
+                job="{service}",
+                envoy_http_conn_manager_prefix="ingress"
+              }}[1m])
+            )
           )
         '''),
+
 
         "error": q(f'''
           sum(rate(envoy_http_downstream_rq_xx{{

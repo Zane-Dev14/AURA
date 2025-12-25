@@ -41,6 +41,17 @@ SHADOW_MODE = os.environ.get("AURA_SHADOW_MODE", "true").lower() == "true"
 
 LOG_DIR = "logs"
 LOG_FILE = os.path.join(LOG_DIR, "shadow_decisions.csv")
+def log_scale_decision(svc, m, current, delta, target, shadow):
+    print(
+        f"[{svc.upper():<4}] "
+        f"Δ={delta:+d} "
+        f"{current}→{target} | "
+        f"p95={m.get('p95', 0):.2f} "
+        f"p99={m.get('p99', 0):.2f} | "
+        f"cpu={m.get('cpu', 0)*100:.1f}% "
+        f"rps={m.get('rps', 0):.1f} | "
+        f"{'SHADOW' if shadow else 'LIVE'}"
+    )
 
 # -------------------------------------------------
 # Prometheus helper
@@ -169,32 +180,25 @@ def main():
         # Apply / log actions
         # -------------------------------------------------
         for svc in SERVICES:
-            current = int(metrics_cache[svc]["ready"])
-            delta = actions[svc]
-            delta = max(-1, min(1, delta))
-            target = current + delta
-            target = max(MIN_REPLICAS, min(MAX_REPLICAS, target))
+            m = metrics_cache[svc]
 
-            p95 = metrics_cache[svc]["p95"]
+            current = int(m["desired"])
+            delta = max(-1, min(1, actions[svc]))
+            target = max(MIN_REPLICAS, min(MAX_REPLICAS, current + delta))
 
-            print(
-                f"[{svc.upper()}] curr={current} "
-                f"delta={delta} target={target} p95={p95:.2f}"
+            # 🔥 ONE-LINE IMPORTANT METRICS
+            log_scale_decision(
+                svc=svc,
+                m=m,
+                current=current,
+                delta=delta,
+                target=target,
+                shadow=SHADOW_MODE
             )
-
-            with open(LOG_FILE, "a", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    datetime.utcnow().isoformat(),
-                    svc,
-                    current,
-                    delta,
-                    target,
-                    p95
-                ])
 
             if not SHADOW_MODE:
                 scale(svc, target)
+
 
         last_action_time = time.time()
 
