@@ -1,99 +1,66 @@
-from flask import Flask, jsonify, request,g
-from flask_mysqldb import MySQL
-import os,time
+from flask import Flask, jsonify, request
+from sqlalchemy import create_engine, text
+from sqlalchemy.pool import QueuePool
+import os
 
 api = Flask(__name__)
-SERVICE="api"
-# MySQL configurations
-api.config["MYSQL_HOST"] = os.getenv("MYSQL_HOST", "db")
-api.config["MYSQL_USER"] = os.getenv("MYSQL_USER", "user")
-api.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD", "password")
-api.config["MYSQL_DB"] = os.getenv("MYSQL_DB", "quotesdb")
 
-mysql = MySQL(api)
+# Database configuration (matches your target version)
+DB_HOST = os.getenv("DB_HOST", "db")
+DB_USER = os.getenv("DB_USER", "user")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
+DB_NAME = os.getenv("DB_NAME", "quotesdb")
 
-# Built-in collectors: CPU, memory, fds, start time, OS-level stats
-#processcollector wont work for windows (wasted an hour)
+# SQLAlchemy engine with connection pooling
+engine = create_engine(
+    f"mysql+mysqldb://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}",
+    poolclass=QueuePool,
+    pool_size=20,
+    max_overflow=30,
+    pool_recycle=180,
+    pool_pre_ping=True,
+)
 
-
+# --------------------
+# Routes
+# --------------------
 
 @api.route("/api/quotes", methods=["GET"])
 def get_quotes():
-    cursor = mysql.connection.cursor()
-    cursor.execute("SELECT * FROM quotes")
-    quotes = cursor.fetchall()
-    cursor.close()
-    return jsonify([{"id": q[0], "quote": q[1], "author": q[2]} for q in quotes])
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT * FROM quotes")).fetchall()
+        return jsonify([
+            {"id": r[0], "quote": r[1], "author": r[2]}
+            for r in rows
+        ])
 
+@api.route("/api/quotes", methods=["POST"])
+def add_quote():
+    data = request.get_json()
+    quote = data["quote"]
+    author = data["author"]
+
+    with engine.begin() as conn:
+        result = conn.execute(
+            text("INSERT INTO quotes (quote, author) VALUES (:quote, :author)"),
+            {"quote": quote, "author": author}
+        )
+        quote_id = result.lastrowid
+
+    return jsonify({
+        "id": quote_id,
+        "quote": quote,
+        "author": author
+    }), 201
 
 @api.route("/health", methods=["GET"])
 def health():
     return "OK", 200
 
-
-@api.route("/api/quotes", methods=["POST"])
-def add_quote():
-    content = request.json["quote"]
-    author = request.json["author"]
-    cursor = mysql.connection.cursor()
-    cursor.execute(
-        "INSERT INTO quotes (quote, author) VALUES (%s, %s)", (content, author)
-    )
-    mysql.connection.commit()
-    quote_id = cursor.lastrowid
-    cursor.close()
-    return jsonify({"id": quote_id, "quote": content, "author": author}), 201
-
+# --------------------
+# App entry point
+# --------------------
 
 if __name__ == "__main__":
-    # Use the PORT environment variable provided by Beanstalk, defaulting to 5001 for local development
     port = int(os.environ.get("PORT", 5001))
     api.run(host="0.0.0.0", port=port)
-
-
-# from flask import Flask, jsonify, request
-# from flask_mysqldb import MySQL
-# import os
-
-# api = Flask(__name__)
-
-# # MySQL configurations
-# api.config["MYSQL_HOST"] = os.getenv("MYSQL_HOST", "db")
-# api.config["MYSQL_USER"] = os.getenv("MYSQL_USER", "user")
-# api.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD", "password")
-# api.config["MYSQL_DB"] = os.getenv("MYSQL_DB", "quotesdb")
-
-# mysql = MySQL(api)
-
-
-# @api.route("/api/quotes", methods=["GET"])
-# def get_quotes():
-#     cursor = mysql.connection.cursor()
-#     cursor.execute("SELECT * FROM quotes")
-#     quotes = cursor.fetchall()
-#     cursor.close()
-#     return jsonify([{"id": q[0], "quote": q[1], "author": q[2]} for q in quotes])
-
-
-# @api.route("/health")
-# def health():
-#     return "OK", 200
-
-
-# @api.route("/api/quotes", methods=["POST"])
-# def add_quote():
-#     content = request.json["quote"]
-#     author = request.json["author"]
-#     cursor = mysql.connection.cursor()
-#     cursor.execute(
-#         "INSERT INTO quotes (quote, author) VALUES (%s, %s)", (content, author)
-#     )
-#     mysql.connection.commit()
-#     quote_id = cursor.lastrowid
-#     cursor.close()
-#     return jsonify({"id": quote_id, "quote": content, "author": author})
-
-
-# if __name__ == "__main__":
-#     api.run(host="0.0.0.0", port=5001)
-#     # api.run(debug=True, host="0.0.0.0", port=5001)

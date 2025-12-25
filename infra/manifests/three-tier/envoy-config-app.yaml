@@ -4,6 +4,25 @@ metadata:
   name: envoy-config-app
 data:
   envoy.yaml: |
+    overload_manager:
+      refresh_interval: 0.25s
+      resource_monitors:
+        - name: envoy.resource_monitors.global_downstream_max_connections
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.resource_monitors.downstream_connections.v3.DownstreamConnectionsConfig
+            max_active_downstream_connections: 1200
+      actions:
+        - name: envoy.overload_actions.stop_accepting_connections
+          triggers:
+            - name: envoy.resource_monitors.global_downstream_max_connections
+              threshold:
+                value: 0.75
+        - name: envoy.overload_actions.reject_incoming_connections
+          triggers:
+            - name: envoy.resource_monitors.global_downstream_max_connections
+              threshold:
+                value: 0.85
+
     static_resources:
       listeners:
       - name: listener_http
@@ -17,12 +36,18 @@ data:
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
               stat_prefix: ingress
+<<<<<<< Updated upstream
+=======
+              request_timeout: 20s
+              stream_idle_timeout: 20s
+>>>>>>> Stashed changes
               route_config:
                 name: local_route
                 virtual_hosts:
                 - name: app
                   domains: ["*"]
                   routes:
+<<<<<<< Updated upstream
                     - match:
                         prefix: "/api"
                       route:
@@ -34,16 +59,34 @@ data:
                       route:
                         cluster: app
 
+=======
+                  - match:
+                      prefix: "/api"
+                    route:
+                      cluster: api
+                  - match:
+                      prefix: "/"
+                    route:
+                      cluster: app
+>>>>>>> Stashed changes
               http_filters:
               - name: envoy.filters.http.router
-                typed_config:
-                  "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
       clusters:
       # App container
       - name: app
-        connect_timeout: 0.25s
+        connect_timeout: 0.5s
         type: STATIC
+<<<<<<< Updated upstream
+=======
+        circuit_breakers:
+          thresholds:
+          - priority: DEFAULT
+            max_connections: 800
+            max_pending_requests: 400
+            max_requests: 800
+            max_retries: 0
+>>>>>>> Stashed changes
         load_assignment:
           cluster_name: app
           endpoints:
@@ -56,9 +99,19 @@ data:
 
       # API service
       - name: api
-        connect_timeout: 0.25s
+        connect_timeout: 0.5s
         type: STRICT_DNS
         lb_policy: ROUND_ROBIN
+<<<<<<< Updated upstream
+=======
+        circuit_breakers:
+          thresholds:
+          - priority: DEFAULT
+            max_connections: 600
+            max_pending_requests: 300
+            max_requests: 600
+            max_retries: 0
+>>>>>>> Stashed changes
         load_assignment:
           cluster_name: api
           endpoints:

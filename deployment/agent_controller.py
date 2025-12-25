@@ -96,7 +96,10 @@ LOG_FILE = os.path.join(LOG_DIR, "shadow_decisions.csv")
 # Scaling helper
 # -------------------------------------------------
 def scale(service: str, replicas: int):
+<<<<<<< Updated upstream
     replicas = max(MIN_REPLICAS, min(MAX_REPLICAS, replicas))
+=======
+>>>>>>> Stashed changes
     subprocess.run(
         [
             "kubectl",
@@ -109,6 +112,7 @@ def scale(service: str, replicas: int):
         ],
         check=False,
     )
+
 
 # -------------------------------------------------
 # Main loop
@@ -152,7 +156,8 @@ def main():
         for svc in SERVICES:
             metrics = collect_metrics(svc)
             metrics_cache[svc] = metrics
-            obs[svc] = build_observation(svc, metrics)
+            obs[svc] = build_observation(svc, metrics, metrics_cache)
+
 
         # -------------------------------------------------
         # Inference
