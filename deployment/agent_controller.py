@@ -96,10 +96,6 @@ LOG_FILE = os.path.join(LOG_DIR, "shadow_decisions.csv")
 # Scaling helper
 # -------------------------------------------------
 def scale(service: str, replicas: int):
-<<<<<<< Updated upstream
-    replicas = max(MIN_REPLICAS, min(MAX_REPLICAS, replicas))
-=======
->>>>>>> Stashed changes
     subprocess.run(
         [
             "kubectl",
@@ -112,6 +108,7 @@ def scale(service: str, replicas: int):
         ],
         check=False,
     )
+
 
 
 # -------------------------------------------------
@@ -174,6 +171,7 @@ def main():
         for svc in SERVICES:
             current = int(metrics_cache[svc]["ready"])
             delta = actions[svc]
+            delta = max(-1, min(1, delta))
             target = current + delta
             target = max(MIN_REPLICAS, min(MAX_REPLICAS, target))
 

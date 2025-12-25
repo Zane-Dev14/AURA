@@ -36,30 +36,14 @@ data:
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
               stat_prefix: ingress
-<<<<<<< Updated upstream
-=======
               request_timeout: 20s
               stream_idle_timeout: 20s
->>>>>>> Stashed changes
               route_config:
                 name: local_route
                 virtual_hosts:
                 - name: app
                   domains: ["*"]
                   routes:
-<<<<<<< Updated upstream
-                    - match:
-                        prefix: "/api"
-                      route:
-                        cluster: api
-
-                    # 🔹 App UI (catch-all LAST)
-                    - match:
-                        prefix: "/"
-                      route:
-                        cluster: app
-
-=======
                   - match:
                       prefix: "/api"
                     route:
@@ -68,17 +52,13 @@ data:
                       prefix: "/"
                     route:
                       cluster: app
->>>>>>> Stashed changes
               http_filters:
               - name: envoy.filters.http.router
 
       clusters:
-      # App container
       - name: app
         connect_timeout: 0.5s
         type: STATIC
-<<<<<<< Updated upstream
-=======
         circuit_breakers:
           thresholds:
           - priority: DEFAULT
@@ -86,7 +66,6 @@ data:
             max_pending_requests: 400
             max_requests: 800
             max_retries: 0
->>>>>>> Stashed changes
         load_assignment:
           cluster_name: app
           endpoints:
@@ -97,13 +76,10 @@ data:
                     address: 127.0.0.1
                     port_value: 5002
 
-      # API service
       - name: api
         connect_timeout: 0.5s
         type: STRICT_DNS
         lb_policy: ROUND_ROBIN
-<<<<<<< Updated upstream
-=======
         circuit_breakers:
           thresholds:
           - priority: DEFAULT
@@ -111,7 +87,6 @@ data:
             max_pending_requests: 300
             max_requests: 600
             max_retries: 0
->>>>>>> Stashed changes
         load_assignment:
           cluster_name: api
           endpoints:
