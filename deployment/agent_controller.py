@@ -6,7 +6,15 @@ import subprocess
 import requests
 import csv
 import numpy as np
+
+#Making logs better
 from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def ist_time_str():
+    return datetime.now(IST).strftime("%H:%M:%S")
 
 # -------------------------------------------------
 # Force project root into PYTHONPATH

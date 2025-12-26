@@ -18,6 +18,25 @@ spec:
       - name: db
         image: project-db:local
         imagePullPolicy: IfNotPresent
+        command:
+            - /bin/bash
+            - -c
+            - |
+                cat > /etc/mysql/conf.d/performance.cnf <<'EOF'
+                [mysqld]
+                max_connections = 500
+                max_connect_errors = 1000
+                connect_timeout = 10
+                wait_timeout = 600
+                max_allowed_packet = 64M
+                innodb_buffer_pool_size = 512M
+                innodb_flush_log_at_trx_commit = 2
+                innodb_flush_method = O_DIRECT
+                EOF
+
+                # Start MySQL normally
+                exec docker-entrypoint.sh mysqld
+
         env:
           - name: MYSQL_DATABASE
             value: quotesdb

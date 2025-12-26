@@ -13,4 +13,4 @@ COPY . .
 
 EXPOSE 5001
 
-CMD ["gunicorn", "api:api",     "-k", "gevent",     "-w", "4",     "--worker-connections", "400",    "--timeout", "60",     "--bind", "0.0.0.0:5001"]
+CMD ["gunicorn", "api:api",     "-k", "gevent",     "-w", "4",     "--worker-connections", "200",    "--timeout", "60",     "--bind", "0.0.0.0:5001"]
