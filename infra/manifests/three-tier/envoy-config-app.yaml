@@ -36,7 +36,7 @@ data:
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
               stat_prefix: ingress
-              request_timeout: 20s
+              request_timeout: 10s
               stream_idle_timeout: 20s
               route_config:
                 name: local_route
@@ -52,6 +52,8 @@ data:
                       prefix: "/"
                     route:
                       cluster: app
+                      timeout: 5s
+
               http_filters:
               - name: envoy.filters.http.router
                 typed_config:

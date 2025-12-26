@@ -1,5 +1,5 @@
-flask
-mysqlclient
-sqlalchemy
+fastapi
+uvicorn
 gunicorn
-gevent
+sqlalchemy
+mysqlclient

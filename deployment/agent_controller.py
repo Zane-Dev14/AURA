@@ -8,7 +8,6 @@ import csv
 import numpy as np
 
 #Making logs better
-from datetime import datetime
 from datetime import datetime, timedelta, timezone
 
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -54,62 +53,14 @@ def log_scale_decision(svc, m, current, delta, target, shadow):
         f"[{svc.upper():<4}] "
         f"Δ={delta:+d} "
         f"{current}→{target} | "
-        f"p95={m.get('p95', 0):.2f} "
-        f"p99={m.get('p99', 0):.2f} | "
+        f"p95={m.get('p95', 0):.3f} "
+        f"p99={m.get('p99', 0):.3f} | "
         f"cpu={m.get('cpu', 0)*100:.1f}% "
         f"rps={m.get('rps', 0):.1f} | "
-        f"{'SHADOW' if shadow else 'LIVE'}"
+        f"{'SHADOW' if shadow else 'LIVE'}",
+        flush=True
     )
 
-# -------------------------------------------------
-# Prometheus helper
-# -------------------------------------------------
-# def prom(query: str) -> float:
-#     try:
-#         r = requests.get(
-#             f"{PROMETHEUS_URL}/api/v1/query",
-#             params={"query": query},
-#             timeout=5,
-#         ).json()
-#         if r.get("data", {}).get("result"):
-#             return float(r["data"]["result"][0]["value"][1])
-#     except Exception as e:
-#         print("⚠️ Prometheus error:", e)
-#     return 0.0
-
-# -------------------------------------------------
-# Metric collection (raw Prometheus → dict)
-# -------------------------------------------------
-# def collect_metrics(service: str) -> dict:
-#     return {
-#         "cpu": prom(
-#             f'rate(container_cpu_usage_seconds_total{{pod=~"{service}-.*"}}[1m])'
-#         ),
-#         "memory": prom(
-#             f'container_memory_working_set_bytes{{pod=~"{service}-.*"}}'
-#         ) / 1e9,
-#         "rps": prom(
-#             f'rate(http_requests_total{{service="{service}"}}[1m])'
-#         ),
-#         "error_rate": prom(
-#             f'rate(http_requests_total{{service="{service}",status=~"5.."}}[1m])'
-#         ),
-#         "p50": prom(
-#             f'histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{{service="{service}"}}[5m])) by (le))'
-#         ),
-#         "p95": prom(
-#             f'histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{{service="{service}"}}[5m])) by (le))'
-#         ),
-#         "p99": prom(
-#             f'histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{{service="{service}"}}[5m])) by (le))'
-#         ),
-#         "desired": prom(
-#             f'kube_deployment_spec_replicas{{deployment="{service}"}}'
-#         ),
-#         "ready": prom(
-#             f'kube_deployment_status_replicas_available{{deployment="{service}"}}'
-#         ),
-#     }
 
 # -------------------------------------------------
 # Scaling helper
@@ -140,17 +91,12 @@ def main():
 
     os.makedirs(LOG_DIR, exist_ok=True)
 
-    if not os.path.exists(LOG_FILE):
-        with open(LOG_FILE, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                "timestamp",
-                "service",
-                "current_replicas",
-                "action_delta",
-                "target_replicas",
-                "p95_latency"
-            ])
+    with open(LOG_FILE, "w") as f:
+        f.write(
+            "time     | svc | cur | Δ  | tgt | p99\n"
+        )
+
+
 
     agent = AuraInference(CHECKPOINT_DIR)
     print("✅ MARL inference loaded")
@@ -203,8 +149,18 @@ def main():
                 target=target,
                 shadow=SHADOW_MODE
             )
+            with open(LOG_FILE, "a") as f:
+                f.write(
+                    f"{ist_time_str():<8} | "
+                    f"{svc:<3} | "
+                    f"{current:>3} | "
+                    f"{delta:+2} | "
+                    f"{target:>3} | "
+                    f"{m.get('p99', 0.0):>7.4f}\n"
+                )
 
-            if not SHADOW_MODE:
+
+            if not SHADOW_MODE and target != current:
                 scale(svc, target)
 
 
