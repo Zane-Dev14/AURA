@@ -1,0 +1,1976 @@
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+✅ AURA Agent Controller Started
+🎭 Shadow mode: False
+📦 Checkpoints: marl/qmix_trained
+✅ MARL inference loaded
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:06:42.421164
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.290 (29.0%)
+     Memory:    0.208 (20.8%)
+     RPS:       152.77 req/s
+     Queue:     409.0 active
+     Errors:    0.3836 err/s
+     P50:       327.55 ms
+     P95:       491.02 ms
+     P99:       991.25 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     +1
+     Target:    2
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.14497976 0.10382843 0.932131   0.99709195 0.99872917 0.3055385
+ 0.38357407 2.         0.99557215 0.1        0.1        1.
+ 0.         0.5226066  0.818      0.99709195]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=2
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.082 (8.2%)
+     Memory:    0.085 (8.5%)
+     RPS:       120.89 req/s
+     Queue:     157.7 active
+     Errors:    0.0000 err/s
+     P50:       369.89 ms
+     P95:       887.30 ms
+     P99:       991.67 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.04077035 0.04253896 0.9516281  1.         0.9987906  0.24177778
+ 0.         1.5766667  0.9842406  0.3        0.3        1.
+ 0.         0.16165087 0.31533334 1.0921253 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.122 (12.2%)
+     Memory:    0.401 (40.1%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.06081363 0.20074081 0.28822148 0.4186673  0.440676   0.
+ 0.         0.         0.         0.1        0.1        1.
+ 0.         0.23856743 0.         0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:07:13.075096
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.406 (40.6%)
+     Memory:    0.207 (20.7%)
+     RPS:       294.64 req/s
+     Queue:     189.0 active
+     Errors:    7.3415 err/s
+     P50:       321.21 ms
+     P95:       495.28 ms
+     P99:       20452.96 ms
+  🎯 REPLICAS:
+     Current:   2
+     Desired:   2
+     Ready:     2
+  🤖 ACTION:
+     Delta:     +1
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.20285599 0.10350037 0.92899656 0.99847883 1.         0.5892819
+ 1.         1.89       0.9931612  0.2        0.2        1.
+ 0.14497976 0.2274559  0.378      0.99847883]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=3
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.230 (23.0%)
+     Memory:    0.085 (8.5%)
+     RPS:       397.62 req/s
+     Queue:     165.7 active
+     Errors:    14.8889 err/s
+     P50:       348.77 ms
+     P95:       963.15 ms
+     P99:       24425.58 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.11482067 0.04267438 0.9422004  1.         1.         0.79524446
+ 1.         1.6566666  0.9999688  0.3        0.3        1.
+ 0.04077035 0.28783247 0.33133334 1.1053052 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.383 (38.3%)
+     Memory:    0.402 (40.2%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.19170682 0.20110703 0.28822148 0.4186673  0.440676   0.
+ 0.         0.         0.         0.1        0.1        1.
+ 0.06081363 0.48045278 0.         0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:07:43.714511
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.508 (50.8%)
+     Memory:    0.206 (20.6%)
+     RPS:       379.64 req/s
+     Queue:     237.7 active
+     Errors:    35.4734 err/s
+     P50:       296.32 ms
+     P95:       680.71 ms
+     P99:       21958.67 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +1
+     Target:    4
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.2539853  0.10307439 0.91606283 1.         1.         0.75927055
+ 1.         2.         0.9353949  0.3        0.3        1.
+ 0.20285599 0.2017126  0.47533333 1.0495447 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=4
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.223 (22.3%)
+     Memory:    0.085 (8.5%)
+     RPS:       406.20 req/s
+     Queue:     178.7 active
+     Errors:    29.8889 err/s
+     P50:       334.24 ms
+     P95:       3387.10 ms
+     P99:       25638.01 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.11162425  0.04261144  0.93537325  1.          1.          0.8124
+  1.          1.7866666   0.1698921   0.3         0.3         1.
+  0.11482067 -0.01278501  0.35733333  1.3074696 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.406 (40.6%)
+     Memory:    0.402 (40.2%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.20303288 0.20105743 0.28822148 0.4186673  0.440676   0.
+ 0.         0.         0.         0.1        0.1        1.
+ 0.19170682 0.04527326 0.         0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:08:14.311775
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.303 (30.3%)
+     Memory:    0.204 (20.4%)
+     RPS:       291.39 req/s
+     Queue:     143.2 active
+     Errors:    18.7409 err/s
+     P50:       278.35 ms
+     P95:       820.72 ms
+     P99:       24241.43 ms
+  🎯 REPLICAS:
+     Current:   4
+     Desired:   4
+     Ready:     4
+  🤖 ACTION:
+     Delta:     +1
+     Target:    5
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.15147115  0.10201168  0.90603286  1.          1.          0.58277667
+  1.          1.4325      0.9982835   0.4         0.4         1.
+  0.2539853  -0.38852066  0.2865      1.0795922 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=5
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.219 (21.9%)
+     Memory:    0.085 (8.5%)
+     RPS:       335.56 req/s
+     Queue:     202.7 active
+     Errors:    34.4556 err/s
+     P50:       334.29 ms
+     P95:       13635.35 ms
+     P99:       26727.07 ms
+  🎯 REPLICAS:
+     Current:   3deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.10958511  0.04259109  0.9353984   1.          1.          0.6711111
+  1.          2.          0.9930005   0.3         0.3         1.
+  0.11162425 -0.00815638  0.40533334  1.5314617 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.370 (37.0%)
+     Memory:    0.402 (40.2%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.18485746  0.2009449   0.28822148  0.4186673   0.440676    0.
+  0.          0.          0.          0.1         0.1         1.
+  0.20303288 -0.07257391  0.          0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:08:44.912942
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.230 (23.0%)
+     Memory:    0.204 (20.4%)
+     RPS:       258.43 req/s
+     Queue:     110.4 active
+     Errors:    10.7240 err/s
+     P50:       235.61 ms
+     P95:       10824.70 ms
+     P99:       26164.96 ms
+  🎯 REPLICAS:
+     Current:   5
+     Desired:   5
+     Ready:     5
+  🤖 ACTION:
+     Delta:     +1
+     Target:    6
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.11490566  0.10179825  0.8793224   1.          1.          0.51686436
+  1.          1.104       0.8663471   0.5         0.5         1.
+  0.15147115 -0.14522786  0.2208      1.4943328 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=6
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.217 (21.7%)
+     Memory:    0.085 (8.5%)
+     RPS:       295.93 req/s
+     Queue:     215.3 active
+     Errors:    34.0000 err/s
+     P50:       334.66 ms
+     P95:       18936.64 ms
+     P99:       27787.33 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.1085662   0.04239528  0.93557274  1.          1.          0.5918667
+  1.          2.          0.91936195  0.3         0.3         1.
+  0.10958511 -0.00407562  0.43066666  1.5842899 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.334 (33.4%)
+     Memory:    0.402 (40.2%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.16688514  0.20103836  0.28822148  0.4186673   0.440676    0.
+  0.          0.          0.          0.1         0.1         1.
+  0.18485746 -0.0717657   0.          0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:09:15.565312
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.182 (18.2%)
+     Memory:    0.203 (20.3%)
+     RPS:       272.04 req/s
+     Queue:     107.7 active
+     Errors:    10.0047 err/s
+     P50:       232.66 ms
+     P95:       13185.77 ms
+     P99:       26637.10 ms
+  🎯 REPLICAS:
+     Current:   6
+     Desired:   6
+     Ready:     6
+  🤖 ACTION:
+     Delta:     +1
+     Target:    7
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.09106409  0.10136477  0.8773069   1.          1.          0.54408735
+  1.          1.0766667   0.26569828  0.6         0.6         1.
+  0.11490566 -0.09507822  0.21533333  1.5260689 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=7
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.196 (19.6%)
+     Memory:    0.085 (8.5%)
+     RPS:       287.42 req/s
+     Queue:     195.7 active
+     Errors:    32.8444 err/s
+     P50:       374.71 ms
+     P95:       21237.56 ms
+     P99:       28247.51 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.09792698  0.04237683  0.9537074   1.          1.          0.5748444
+  1.          1.9566667   0.32787412  0.3         0.3         1.
+  0.1085662  -0.0425312   0.39133334  1.6027352 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.434 (43.4%)
+     Memory:    0.402 (40.2%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.2168311  0.20093346 0.28822148 0.4186673  0.440676   0.
+ 0.         0.         0.         0.1        0.1        1.
+ 0.16688514 0.1971676  0.         0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:09:46.145144
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.172 (17.2%)
+     Memory:    0.203 (20.3%)
+     RPS:       279.83 req/s
+     Queue:     82.3 active
+     Errors:    8.3716 err/s
+     P50:       264.81 ms
+     P95:       16741.28 ms
+     P99:       27348.26 ms
+  🎯 REPLICAS:
+     Current:   7
+     Desired:   7
+     Ready:     7
+  🤖 ACTION:
+     Delta:     +1
+     Target:    8
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.08590418  0.10135432  0.89804244  1.          1.          0.55966306
+  1.          0.82285714  0.15450995  0.7         0.7         1.
+  0.09106409 -0.02063669  0.16457143  1.5644698 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=8
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.190 (19.0%)
+     Memory:    0.085 (8.5%)
+     RPS:       308.20 req/s
+     Queue:     200.3 active
+     Errors:    26.2000 err/s
+     P50:       412.55 ms
+     P95:       21539.35 ms
+     P99:       28307.87 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.09521804  0.04249636  0.9691437   1.          1.          0.6164
+  1.          2.          0.39317963  0.3         0.3         1.
+  0.09792698 -0.01083535  0.40066665  1.6050049 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.436 (43.6%)
+     Memory:    0.404 (40.4%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.21822464 0.2017746  0.28822148 0.4186673  0.440676   0.
+ 0.         0.         0.         0.1        0.1        1.
+ 0.2168311  0.00557412 0.         0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+
+⏰ DECISION CYCLE @ 2025-12-24T09:10:16.748102
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.147 (14.7%)
+     Memory:    0.202 (20.2%)
+     RPS:       310.88 req/s
+     Queue:     65.8 active
+     Errors:    6.2058 err/s
+     P50:       310.23 ms
+     P95:       17431.74 ms
+     P99:       27486.33 ms
+  🎯 REPLICAS:
+     Current:   8
+     Desired:   8
+     Ready:     8
+  🤖 ACTION:
+     Delta:     +1
+     Target:    9
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.07341855  0.10108232  0.923418    1.          1.          0.62176764
+  1.          0.6575      0.5518558   0.8         0.8         1.
+  0.08590418 -0.04990105  0.1315      1.5709705 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=9
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.205 (20.5%)
+     Memory:    0.085 (8.5%)
+     RPS:       341.98 req/s
+     Queue:     187.7 active
+     Errors:    17.3333 err/s
+     P50:       439.23 ms
+     P95:       20695.85 ms
+     P99:       28139.17 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.102368   0.04265594 0.9791985  1.         1.         0.68395555
+ 1.         1.8766667  0.58862245 0.3        0.3        1.
+ 0.09521804 0.02859206 0.37533334 1.5985792 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.443 (44.3%)
+     Memory:    0.404 (40.4%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.22165509 0.20191193 0.28822148 0.4186673  0.440676   0.
+ 0.         0.         0.         0.1        0.1        1.
+ 0.21822464 0.01372093 0.         0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:10:47.357780
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.125 (12.5%)
+     Memory:    0.202 (20.2%)
+     RPS:       337.02 req/s
+     Queue:     58.1 active
+     Errors:    4.6172 err/s
+     P50:       342.49 ms
+     P95:       18614.59 ms
+     P99:       27722.81 ms
+  🎯 REPLICAS:
+     Current:   9
+     Desired:   9
+     Ready:     9
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.06266312  0.10090426  0.93928534  1.          1.          0.674045
+  1.          0.58111113  0.47983778  0.9         0.9         1.
+  0.07341855 -0.04299518  0.11622223  1.5815309 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.184 (18.4%)
+     Memory:    0.085 (8.5%)
+     RPS:       342.84 req/s
+     Queue:     189.3 active
+     Errors:    10.6667 err/s
+     P50:       460.88 ms
+     P95:       19686.96 ms
+     P99:       27937.39 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.09215699  0.04254659  0.9869209   1.          1.          0.6856889
+  1.          1.8933333   0.0173316   0.3         0.3         1.
+  0.102368   -0.04082135  0.37866667  1.5905403 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.452 (45.2%)
+     Memory:    0.405 (40.5%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.22603072 0.2022934  0.28822148 0.4186673  0.440676   0.
+ 0.         0.         0.         0.1        0.1        1.
+ 0.22165509 0.01750076 0.         0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:11:17.955855
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.125 (12.5%)
+     Memory:    0.202 (20.2%)
+     RPS:       345.54 req/s
+     Queue:     58.7 active
+     Errors:    3.3187 err/s
+     P50:       360.90 ms
+     P95:       19435.43 ms
+     P99:       27887.05 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 6.2386807e-02  1.0085297e-01  9.4768119e-01  1.0000000e+00
+  1.0000000e+00  6.9108969e-01  1.0000000e+00  5.8700001e-01
+  1.6881508e-01  1.0000000e+00  1.0000000e+00  1.0000000e+00
+  6.2663123e-02 -1.1052657e-03  1.1740000e-01  1.5884719e+00]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.211 (21.1%)
+     Memory:    0.085 (8.5%)
+     RPS:       347.84 req/s
+     Queue:     188.3 active
+     Errors:    8.4000 err/s
+     P50:       480.10 ms
+     P95:       18528.96 ms
+     P99:       27705.79 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.10554291 0.04273478 0.99348116 1.         1.         0.6956889
+ 1.         1.8833333  0.099668   0.3        0.3        1.
+ 0.09215699 0.05349255 0.37666667 1.5807893 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.465 (46.5%)
+     Memory:    0.405 (40.5%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.23242693 0.20264244 0.28822148 0.4186673  0.440676   0.
+ 0.         0.         0.         0.1        0.1        1.
+ 0.22603072 0.02557924 0.         0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:11:48.664127
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.130 (13.0%)
+     Memory:    0.202 (20.2%)
+     RPS:       343.69 req/s
+     Queue:     58.6 active
+     Errors:    3.1556 err/s
+     P50:       375.63 ms
+     P95:       20426.44 ms
+     P99:       28085.26 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.06479813 0.10088806 0.95409834 1.         1.         0.68737733
+ 1.         0.586      0.07411069 1.         1.         1.
+ 0.06238681 0.009645   0.1172     1.5964714 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.217 (21.7%)
+     Memory:    0.085 (8.5%)
+     RPS:       343.42 req/s
+     Queue:     190.7 active
+     Errors:    6.6000 err/s
+     P50:       512.78 ms
+     P95:       18068.70 ms
+     P99:       27613.74 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.10833815 0.04270108 1.         1.         1.         0.68684447
+ 1.         1.9066666  0.17506675 0.3        0.3        1.
+ 0.10554291 0.01118049 0.38133332 1.5767432 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.472 (47.2%)
+     Memory:    0.405 (40.5%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.23603554 0.20250511 0.28822148 0.4186673  0.440676   0.
+ 0.         0.         0.         0.1        0.1        1.
+ 0.23242693 0.01443342 0.         0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:12:19.452035
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.120 (12.0%)
+     Memory:    0.202 (20.2%)
+     RPS:       333.38 req/s
+     Queue:     54.5 active
+     Errors:    2.2843 err/s
+     P50:       381.92 ms
+     P95:       21486.50 ms
+     P99:       28297.24 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.06024501  0.1009449   0.9567651   1.          1.          0.66675556
+  1.          0.545       0.39053872  1.          1.          1.
+  0.06479813 -0.01821049  0.109       1.6046097 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.172 (17.2%)
+     Memory:    0.085 (8.5%)
+     RPS:       334.38 req/s
+     Queue:     193.3 active
+     Errors:    3.4889 err/s
+     P50:       541.18 ms
+     P95:       18585.82 ms
+     P99:       27717.16 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.08606442  0.04256121  1.          1.          1.          0.66875553
+  1.          1.9333333   0.346779    0.3         0.3         1.
+  0.10833815 -0.0888599   0.38666666  1.5812821 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.472 (47.2%)
+     Memory:    0.405 (40.5%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 2.3603062e-01  2.0251274e-01  2.8822148e-01  4.1866729e-01
+  4.4067600e-01  0.0000000e+00  0.0000000e+00  0.0000000e+00
+  0.0000000e+00  1.0000000e-01  1.0000000e-01  1.0000000e+00
+  2.3603554e-01 -1.9647354e-05  0.0000000e+00  4.1866729e-01]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:12:50.073271
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.125 (12.5%)
+     Memory:    0.202 (20.2%)
+     RPS:       350.56 req/s
+     Queue:     55.1 active
+     Errors:    1.0889 err/s
+     P50:       387.40 ms
+     P95:       22212.39 ms
+     P99:       28442.46 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.062263   0.10094795 0.95905113 1.         1.         0.70111114
+ 1.         0.551      0.33064795 1.         1.         1.
+ 0.06024501 0.00807182 0.1102     1.6099541 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.196 (19.6%)
+     Memory:    0.085 (8.5%)
+     RPS:       348.62 req/s
+     Queue:     180.7 active
+     Errors:    1.3333 err/s
+     P50:       552.36 ms
+     P95:       18654.21 ms
+     P99:       27730.84 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.09806096 0.04258283 1.         1.         1.         0.69724447
+ 1.         1.8066666  0.2774238  0.3        0.3        1.
+ 0.08606442 0.04794936 0.36133334 1.5818729 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.471 (47.1%)
+     Memory:    0.405 (40.5%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.23540364  0.20271873  0.28822148  0.4186673   0.440676    0.
+  0.          0.          0.          0.1         0.1         1.
+  0.23603062 -0.0025079   0.          0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:13:20.740083
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.123 (12.3%)
+     Memory:    0.201 (20.1%)
+     RPS:       351.29 req/s
+     Queue:     55.4 active
+     Errors:    1.1333 err/s
+     P50:       388.30 ms
+     P95:       22330.46 ms
+     P99:       28466.09 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.06168274  0.10074653  0.9594226   1.          1.          0.7025731
+  1.          0.554       0.01461887  1.          1.          1.
+  0.062263   -0.00232106  0.1108      1.610807  ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.211 (21.1%)
+     Memory:    0.085 (8.5%)
+     RPS:       350.42 req/s
+     Queue:     180.0 active
+     Errors:    1.6444 err/s
+     P50:       556.67 ms
+     P95:       18664.25 ms
+     P99:       27732.85 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.10535118 0.04269028 1.         1.         1.         0.70084447
+ 1.         1.8        0.03598446 0.3        0.3        1.
+ 0.09806096 0.0291526  0.36       1.5819595 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.467 (46.7%)
+     Memory:    0.407 (40.7%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.23372667  0.20348358  0.28822148  0.4186673   0.440676    0.
+  0.          0.          0.          0.1         0.1         1.
+  0.23540364 -0.00670782  0.          0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:13:51.554795deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.130 (13.0%)
+     Memory:    0.202 (20.2%)
+     RPS:       351.32 req/s
+     Queue:     55.0 active
+     Errors:    1.8223 err/s
+     P50:       389.80 ms
+     P95:       21745.59 ms
+     P99:       28349.12 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [6.49390593e-02 1.00970075e-01 9.60040927e-01 1.00000000e+00
+ 1.00000000e+00 7.02642500e-01 1.00000000e+00 5.50000012e-01
+ 6.93916576e-04 1.00000000e+00 1.00000000e+00 1.00000000e+00
+ 6.16827384e-02 1.30245350e-02 1.09999999e-01 1.60653770e+00]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.204 (20.4%)
+     Memory:    0.085 (8.5%)
+     RPS:       348.80 req/s
+     Queue:     189.7 active
+     Errors:    2.2000 err/s
+     P50:       552.78 ms
+     P95:       17781.26 ms
+     P99:       27556.25 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.10222282  0.04238828  1.          1.          1.          0.6976
+  1.          1.8966666   0.06479797  0.3         0.3         1.
+  0.10535118 -0.01251278  0.37933335  1.5741639 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.347 (34.7%)
+     Memory:    0.405 (40.5%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.17350136  0.20271301  0.28822148  0.4186673   0.440676    0.
+  0.          0.          0.          0.1         0.1         1.
+  0.23372667 -0.23634681  0.          0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:14:22.359347
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.126 (12.6%)
+     Memory:    0.202 (20.2%)
+     RPS:       354.49 req/s
+     Queue:     53.5 active
+     Errors:    1.1778 err/s
+     P50:       386.83 ms
+     P95:       21335.48 ms
+     P99:       28267.10 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.06310797  0.10091324  0.9588136   1.          1.          0.70897776
+  1.          0.535       0.06326821  1.          1.          1.
+  0.06493906 -0.0073242   0.107       1.6034752 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.206 (20.6%)
+     Memory:    0.084 (8.4%)
+     RPS:       355.19 req/s
+     Queue:     177.3 active
+     Errors:    1.5112 err/s
+     P50:       545.91 ms
+     P95:       17196.75 ms
+     P99:       27439.35 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.10323884 0.04216576 1.         1.         1.         0.71037984
+ 1.         1.7733333  0.12710726 0.3        0.3        1.
+ 0.10222282 0.00406404 0.35466668 1.5687875 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.377 (37.7%)
+     Memory:    0.403 (40.3%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.18856265 0.20170975 0.28822148 0.4186673  0.440676   0.
+ 0.         0.         0.         0.1        0.1        1.
+ 0.17350136 0.06017235 0.         0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:14:53.262071
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.121 (12.1%)
+     Memory:    0.202 (20.2%)
+     RPS:       355.24 req/s
+     Queue:     55.8 active
+     Errors:    0.7111 err/s
+     P50:       386.75 ms
+     P95:       21270.75 ms
+     P99:       28254.15 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.06062509  0.10111389  0.95878     1.          1.          0.7104889
+  0.7111111   0.558       0.01510996  1.          1.          1.
+  0.06310797 -0.00993123  0.1116      1.6029865 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.189 (18.9%)
+     Memory:    0.084 (8.4%)
+     RPS:       353.87 req/s
+     Queue:     179.7 active
+     Errors:    0.9778 err/s
+     P50:       544.25 ms
+     P95:       17045.52 ms
+     P99:       27409.10 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.09427587  0.04202906  1.          1.          1.          0.70774806
+  0.9777926   1.7966666   0.05258717  0.3         0.3         1.
+  0.10323884 -0.0358365   0.35933334  1.5673667 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.358 (35.8%)
+     Memory:    0.404 (40.4%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.17875019  0.20191002  0.28822148  0.4186673   0.440676    0.
+  0.          0.          0.          0.1         0.1         1.
+  0.18856265 -0.03922971  0.          0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:15:24.115987
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.127 (12.7%)
+     Memory:    0.202 (20.2%)
+     RPS:       355.71 req/s
+     Queue:     57.2 active
+     Errors:    1.2222 err/s
+     P50:       384.98 ms
+     P95:       21845.48 ms
+     P99:       28369.10 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.06344811 0.10112419 0.95804656 1.         1.         0.7114269
+ 1.         0.572      0.00938026 1.         1.         1.
+ 0.06062509 0.0112916  0.1144     1.6072749 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.223 (22.3%)
+     Memory:    0.084 (8.4%)
+     RPS:       352.76 req/s
+     Queue:     190.3 active
+     Errors:    0.9778 err/s
+     P50:       539.72 ms
+     P95:       17928.69 ms
+     P99:       27585.74 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.11145261 0.04200045 1.         1.         1.         0.7055111
+ 0.9777778  1.9033333  0.04470922 0.3        0.3        1.
+ 0.09427587 0.06859904 0.38066667 1.575492  ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.315 (31.5%)
+     Memory:    0.404 (40.4%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.15765372  0.20220947  0.28822148  0.4186673   0.440676    0.
+  0.          0.          0.          0.1         0.1         1.
+  0.17875019 -0.08418614  0.          0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:15:54.737441
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.125 (12.5%)
+     Memory:    0.202 (20.2%)
+     RPS:       354.00 req/s
+     Queue:     54.8 active
+     Errors:    0.8000 err/s
+     P50:       384.91 ms
+     P95:       22386.58 ms
+     P99:       28477.32 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.06274227  0.10115395  0.9580141   1.          1.          0.708
+  0.8         0.548       0.06843173  1.          1.          1.
+  0.06344811 -0.00282333  0.1096      1.6112106 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.196 (19.6%)
+     Memory:    0.084 (8.4%)
+     RPS:       352.49 req/s
+     Queue:     187.3 active
+     Errors:    0.6222 err/s
+     P50:       538.83 ms
+     P95:       18474.26 ms
+     P99:       27694.85 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.09820559  0.04191462  1.          1.          1.          0.70497775
+  0.62222224  1.8733333   0.01066626  0.3         0.3         1.
+  0.11145261 -0.05293855  0.37466666  1.5803137 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.472 (47.2%)
+     Memory:    0.404 (40.4%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.23586416 0.20211029 0.28822148 0.4186673  0.440676   0.
+ 0.         0.         0.         0.1        0.1        1.
+ 0.15765372 0.30302015 0.         0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:16:25.358537
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.128 (12.8%)
+     Memory:    0.202 (20.2%)
+     RPS:       352.47 req/s
+     Queue:     58.7 active
+     Errors:    0.6444 err/s
+     P50:       386.93 ms
+     P95:       22619.18 ms
+     P99:       28523.84 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.06417837 0.10110398 0.95885426 1.         1.         0.70493335
+ 0.64444447 0.587      0.06125654 1.         1.         1.
+ 0.06274227 0.00574432 0.1174     1.6128732 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.204 (20.4%)
+     Memory:    0.084 (8.4%)
+     RPS:       350.31 req/s
+     Queue:     191.0 active
+     Errors:    0.4889 err/s
+     P50:       540.79 ms
+     P95:       18886.95 ms
+     P99:       27777.39 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.10176256 0.04206022 1.         1.         1.         0.7006222
+ 0.4888889  1.91       0.08689144 0.3        0.3        1.
+ 0.09820559 0.01422693 0.382      1.5838673 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.473 (47.3%)
+     Memory:    0.405 (40.5%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.23640484 0.2023716  0.28822148 0.4186673  0.440676   0.
+ 0.         0.         0.         0.1        0.1        1.
+ 0.23586416 0.00216274 0.         0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:16:56.171526
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.127 (12.7%)
+     Memory:    0.202 (20.2%)
+     RPS:       353.18 req/s
+     Queue:     57.4 active
+     Errors:    0.9556 err/s
+     P50:       388.28 ms
+     P95:       22654.84 ms
+     P99:       28530.97 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.06362409  0.1008625   0.9594124   1.          1.          0.7063556
+  0.95555556  0.574       0.01422126  1.          1.          1.
+  0.06417837 -0.0022171   0.1148      1.6131266 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.217 (21.7%)
+     Memory:    0.084 (8.4%)
+     RPS:       351.96 req/s
+     Queue:     190.3 active
+     Errors:    1.2667 err/s
+     P50:       539.79 ms
+     P95:       19028.44 ms
+     P99:       27805.69 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.10857136 0.04181035 1.         1.         1.         0.7039111
+ 1.         1.9033333  0.03287704 0.3        0.3        1.
+ 0.10176256 0.02722847 0.38066667 1.5850679 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.469 (46.9%)
+     Memory:    0.405 (40.5%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.23444928  0.2023201   0.28822148  0.4186673   0.440676    0.
+  0.          0.          0.          0.1         0.1         1.
+  0.23640484 -0.00782208  0.          0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:17:26.849593
+================================================================================deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.119 (11.9%)
+     Memory:    0.202 (20.2%)
+     RPS:       351.13 req/s
+     Queue:     56.2 active
+     Errors:    0.7333 err/s
+     P50:       389.42 ms
+     P95:       22672.29 ms
+     P99:       28534.46 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.05954415  0.10109176  0.9598824   1.          1.          0.7022667
+  0.73333335  0.562       0.08159596  1.          1.          1.
+  0.06362409 -0.01631832  0.1124      1.6132505 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.224 (22.4%)
+     Memory:    0.084 (8.4%)
+     RPS:       349.73 req/s
+     Queue:     182.0 active
+     Errors:    0.3556 err/s
+     P50:       544.20 ms
+     P95:       18968.00 ms
+     P99:       27793.60 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.11200629 0.04212189 1.         1.         1.         0.69946665
+ 0.35555556 1.82       0.08865552 0.3        0.3        1.
+ 0.10857136 0.01373885 0.364      1.5845561 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.472 (47.2%)
+     Memory:    0.405 (40.5%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.23576379 0.2025814  0.28822148 0.4186673  0.440676   0.
+ 0.         0.         0.         0.1        0.1        1.
+ 0.23444928 0.00525795 0.         0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:17:57.478984
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.120 (12.0%)
+     Memory:    0.202 (20.2%)
+     RPS:       364.00 req/s
+     Queue:     49.1 active
+     Errors:    0.7333 err/s
+     P50:       387.96 ms
+     P95:       22457.19 ms
+     P99:       28491.44 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     +1
+     Target:    10
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.06018459 0.10113335 0.9592836  1.         1.         0.728
+ 0.73333335 0.491      0.2517996  1.         1.         1.
+ 0.05954415 0.00256178 0.0982     1.6117172 ]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=10
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.199 (19.9%)
+     Memory:    0.084 (8.4%)
+     RPS:       360.24 req/s
+     Queue:     180.7 active
+     Errors:    0.2000 err/s
+     P50:       537.67 ms
+     P95:       18722.39 ms
+     P99:       27744.48 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.09967818  0.04195404  1.          1.          1.          0.7204889
+  0.2         1.8066666   0.20717919  0.3         0.3         1.
+  0.11200629 -0.04927249  0.36133334  1.5824597 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.467 (46.7%)
+     Memory:    0.405 (40.5%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.23371479  0.20252037  0.28822148  0.4186673   0.440676    0.
+  0.          0.          0.          0.1         0.1         1.
+  0.23576379 -0.0081958   0.          0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+
+
+================================================================================
+⏰ DECISION CYCLE @ 2025-12-24T09:18:28.006103
+================================================================================
+
+🔷 [API]
+  📊 METRICS:
+     CPU:       0.121 (12.1%)
+     Memory:    0.202 (20.2%)
+     RPS:       372.82 req/s
+     Queue:     48.2 active
+     Errors:    0.5333 err/s
+     P50:       384.68 ms
+     P95:       22012.67 ms
+     P99:       28402.53 ms
+  🎯 REPLICAS:
+     Current:   10
+     Desired:   10
+     Ready:     10
+  🤖 ACTION:
+     Delta:     -1
+     Target:    9
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [6.0392383e-02 1.0116158e-01 9.5791990e-01 1.0000000e+00 1.0000000e+00
+ 7.4564445e-01 5.3333336e-01 4.8199999e-01 1.7463590e-01 1.0000000e+00
+ 1.0000000e+00 1.0000000e+00 6.0184594e-02 8.3114923e-04 9.6400000e-02
+ 1.6085013e+00]
+  ⚡ EXECUTING: kubectl scale deployment api --replicas=9
+
+🔷 [APP]
+  📊 METRICS:
+     CPU:       0.220 (22.0%)
+     Memory:    0.084 (8.4%)
+     RPS:       371.98 req/s
+     Queue:     179.0 active
+     Errors:    0.0000 err/s
+     P50:       533.56 ms
+     P95:       17974.71 ms
+     P99:       27594.94 ms
+  🎯 REPLICAS:
+     Current:   3
+     Desired:   3
+     Ready:     3
+  🤖 ACTION:
+     Delta:     +0
+     Target:    3
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [0.11000159 0.04210663 1.         1.         1.         0.74395555
+ 0.         1.79       0.23045191 0.3        0.3        1.
+ 0.09967818 0.04127014 0.358      1.5759044 ]
+  ⚡ EXECUTING: kubectl scale deployment app --replicas=3
+
+🔷 [DB]
+  📊 METRICS:
+     CPU:       0.465 (46.5%)
+     Memory:    0.404 (40.4%)
+     RPS:       0.00 req/s
+     Queue:     0.0 active
+     Errors:    0.0000 err/s
+     P50:       5.00 ms
+     P95:       12.50 ms
+     P99:       20.00 ms
+  🎯 REPLICAS:
+     Current:   1
+     Desired:   1
+     Ready:     1
+  🤖 ACTION:
+     Delta:     -1
+     Target:    1
+     Mode:      ⚡ LIVE
+  🧮 OBSERVATION VECTOR (16-D):
+     [ 0.23256364  0.20217323  0.28822148  0.4186673   0.440676    0.
+  0.          0.          0.          0.1         0.1         1.
+  0.23371479 -0.00460456  0.          0.4186673 ]
+  ⚡ EXECUTING: kubectl scale deployment db --replicas=1
+
+================================================================================
+

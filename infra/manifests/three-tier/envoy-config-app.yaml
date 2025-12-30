@@ -30,6 +30,7 @@ data:
           socket_address:
             address: 0.0.0.0
             port_value: 8080
+        per_connection_buffer_limit_bytes: 32768
         filter_chains:
         - filters:
           - name: envoy.filters.network.http_connection_manager

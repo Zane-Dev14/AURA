@@ -171,6 +171,7 @@ def main():
             if not SHADOW_MODE and target != current:
                 scale(svc, target)
 
+        print("\n" + "="*80 + "\n")
         last_action_time = time.time()
 
 if __name__ == "__main__":
