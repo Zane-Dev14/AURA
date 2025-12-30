@@ -1,99 +1,94 @@
-from flask import Flask, jsonify, request,g
-from flask_mysqldb import MySQL
-import os,time
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import create_engine, text
+from sqlalchemy.pool import QueuePool
+from sqlalchemy.exc import SQLAlchemyError
+import os
+import time
+from threading import Lock
 
-api = Flask(__name__)
-SERVICE="api"
-# MySQL configurations
-api.config["MYSQL_HOST"] = os.getenv("MYSQL_HOST", "db")
-api.config["MYSQL_USER"] = os.getenv("MYSQL_USER", "user")
-api.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD", "password")
-api.config["MYSQL_DB"] = os.getenv("MYSQL_DB", "quotesdb")
+api = FastAPI()
 
-mysql = MySQL(api)
+# DB config
+DB_HOST = os.getenv("DB_HOST", "db")
+DB_USER = os.getenv("DB_USER", "user")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
+DB_NAME = os.getenv("DB_NAME", "quotesdb")
 
-# Built-in collectors: CPU, memory, fds, start time, OS-level stats
-#processcollector wont work for windows (wasted an hour)
+engine = create_engine(
+    f"mysql+mysqldb://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}",
+    poolclass=QueuePool,
+    pool_size=100,
+    max_overflow=100,
+    pool_timeout=10,
+    pool_recycle=1800,
+    pool_pre_ping=True,
+    connect_args={"connect_timeout": 5},
+)
+
+_cache = {"quotes": None, "timestamp": 0}
+_cache_lock = Lock()
+CACHE_TTL = 10
 
 
+class QuoteIn(BaseModel):
+    text: str
+    author: str | None = None
 
-@api.route("/api/quotes", methods=["GET"])
+
+def get_cached_quotes():
+    now = time.time()
+    with _cache_lock:
+        if _cache["quotes"] and now - _cache["timestamp"] < CACHE_TTL:
+            return _cache["quotes"]
+
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text("SELECT id, text, author FROM quotes LIMIT 100")
+            ).fetchall()
+
+        result = [{"id": r.id, "text": r.text, "author": r.author} for r in rows]
+
+        with _cache_lock:
+            _cache["quotes"] = result
+            _cache["timestamp"] = now
+
+        return result
+    except SQLAlchemyError:
+        return []
+
+
+def invalidate_cache():
+    with _cache_lock:
+        _cache["quotes"] = None
+        _cache["timestamp"] = 0
+
+
+@api.get("/api/quotes")
 def get_quotes():
-    cursor = mysql.connection.cursor()
-    cursor.execute("SELECT * FROM quotes")
-    quotes = cursor.fetchall()
-    cursor.close()
-    return jsonify([{"id": q[0], "quote": q[1], "author": q[2]} for q in quotes])
+    return get_cached_quotes()
 
 
-@api.route("/health", methods=["GET"])
+@api.post("/api/quotes", status_code=201)
+def add_quote(q: QuoteIn):
+    if not q.text.strip():
+        raise HTTPException(status_code=400, detail="Quote text is required")
+
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(
+                text("INSERT INTO quotes (text, author) VALUES (:text, :author)"),
+                {"text": q.text, "author": q.author},
+            )
+
+        invalidate_cache()
+        return {"id": result.lastrowid, "text": q.text, "author": q.author}
+
+    except SQLAlchemyError:
+        raise HTTPException(status_code=500, detail="Database error")
+
+
+@api.get("/health")
 def health():
-    return "OK", 200
-
-
-@api.route("/api/quotes", methods=["POST"])
-def add_quote():
-    content = request.json["quote"]
-    author = request.json["author"]
-    cursor = mysql.connection.cursor()
-    cursor.execute(
-        "INSERT INTO quotes (quote, author) VALUES (%s, %s)", (content, author)
-    )
-    mysql.connection.commit()
-    quote_id = cursor.lastrowid
-    cursor.close()
-    return jsonify({"id": quote_id, "quote": content, "author": author}), 201
-
-
-if __name__ == "__main__":
-    # Use the PORT environment variable provided by Beanstalk, defaulting to 5001 for local development
-    port = int(os.environ.get("PORT", 5001))
-    api.run(host="0.0.0.0", port=port)
-
-
-# from flask import Flask, jsonify, request
-# from flask_mysqldb import MySQL
-# import os
-
-# api = Flask(__name__)
-
-# # MySQL configurations
-# api.config["MYSQL_HOST"] = os.getenv("MYSQL_HOST", "db")
-# api.config["MYSQL_USER"] = os.getenv("MYSQL_USER", "user")
-# api.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD", "password")
-# api.config["MYSQL_DB"] = os.getenv("MYSQL_DB", "quotesdb")
-
-# mysql = MySQL(api)
-
-
-# @api.route("/api/quotes", methods=["GET"])
-# def get_quotes():
-#     cursor = mysql.connection.cursor()
-#     cursor.execute("SELECT * FROM quotes")
-#     quotes = cursor.fetchall()
-#     cursor.close()
-#     return jsonify([{"id": q[0], "quote": q[1], "author": q[2]} for q in quotes])
-
-
-# @api.route("/health")
-# def health():
-#     return "OK", 200
-
-
-# @api.route("/api/quotes", methods=["POST"])
-# def add_quote():
-#     content = request.json["quote"]
-#     author = request.json["author"]
-#     cursor = mysql.connection.cursor()
-#     cursor.execute(
-#         "INSERT INTO quotes (quote, author) VALUES (%s, %s)", (content, author)
-#     )
-#     mysql.connection.commit()
-#     quote_id = cursor.lastrowid
-#     cursor.close()
-#     return jsonify({"id": quote_id, "quote": content, "author": author})
-
-
-# if __name__ == "__main__":
-#     api.run(host="0.0.0.0", port=5001)
-#     # api.run(debug=True, host="0.0.0.0", port=5001)
+    return {"status": "ok"}

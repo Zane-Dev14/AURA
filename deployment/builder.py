@@ -1,3 +1,4 @@
+
 import numpy as np
 import requests
 from collections import deque
@@ -33,7 +34,6 @@ def q(query: str) -> float:
         pass
     return 0.0
 
-
 def collect_metrics(service: str, ns="default"):
     # Ingress RPS (ground truth)
     rps = q(f'''
@@ -58,7 +58,7 @@ def collect_metrics(service: str, ns="default"):
         envoy_http_conn_manager_prefix="ingress"
       }}[1m]))
     ''')
-    
+
     # ✅ FIX: Safety floor
     if avg_latency == 0.0:
         avg_latency = 5.0  # reasonable default: 5ms
@@ -114,6 +114,28 @@ def collect_metrics(service: str, ns="default"):
     if p95 == 0.0: p95 = avg_latency * 2.5
     if p99 == 0.0: p99 = avg_latency * 4.0
 
+    # FIXED: Real queue pressure (not just downstream_rq_active)
+    queue = q(f'''
+      avg(envoy_http_downstream_rq_active{{
+        namespace="{ns}",
+        job="{service}",
+        envoy_http_conn_manager_prefix="ingress"
+      }})
+      +
+      clamp_min(
+        avg(envoy_cluster_upstream_cx_active{{
+          namespace="{ns}",
+          envoy_cluster_name="{service}"
+        }})
+        -
+        avg(envoy_cluster_upstream_rq_active{{
+          namespace="{ns}",
+          envoy_cluster_name="{service}"
+        }}),
+        0
+      )
+    ''')
+
     return {
         "cpu": q(f'''
           sum(rate(container_cpu_usage_seconds_total{{
@@ -146,6 +168,7 @@ def collect_metrics(service: str, ns="default"):
         '''),
 
         "rps": rps,
+        "queue": queue,
 
         "queue": q(f'''
           avg(envoy_http_downstream_rq_active{{

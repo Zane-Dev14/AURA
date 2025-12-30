@@ -1,6 +1,5 @@
-flask
-flask-mysqldb
-mysqlclient
-prometheus-client
+fastapi
+uvicorn
 gunicorn
-gevent
+sqlalchemy
+mysqlclient

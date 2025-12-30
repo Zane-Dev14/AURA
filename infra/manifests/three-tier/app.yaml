@@ -16,7 +16,7 @@ spec:
       containers:
       - name: app
         image: project-app:gevent
-        imagePullPolicy: Never
+        imagePullPolicy: IfNotPresent
         env:
           - name: API_URL
             value: "http://api:8080"
