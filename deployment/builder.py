@@ -141,16 +141,18 @@ def collect_metrics(service: str, ns="default"):
           sum(rate(container_cpu_usage_seconds_total{{
             namespace="{ns}",
             pod=~"{service}-.*",
-            container="{service}"
+            container="{service}",
+            container!="POD"
           }}[1m]))
           /
-          sum(kube_pod_container_resource_limits{{
+          sum(kube_pod_container_resource_requests{{
             namespace="{ns}",
             pod=~"{service}-.*",
             container="{service}",
             resource="cpu"
           }})
         '''),
+
 
         "memory": q(f'''
           sum(container_memory_working_set_bytes{{
@@ -204,6 +206,8 @@ def collect_metrics(service: str, ns="default"):
     }
 
 def build_observation(service: str, m: dict, max_rep=10):
+
+
     cpu_h = _hist(CPU_HISTORY, service)
     rps_h = _hist(RPS_HISTORY, service)
 

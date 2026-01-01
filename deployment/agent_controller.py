@@ -65,7 +65,7 @@ def scale(service: str, replicas: int):
         print(f"⚠️  Clamped {service} replicas {replicas} → {clamped}")
 
     subprocess.run(
-        ["kubectl", "-n", NAMESPACE, "scale", "deployment", service, f"--replicas={replicas}"],
+        ["kubectl", "-n", NAMESPACE, "scale", "deployment", service, f"--replicas={clamped}"],
         check=False,
     )
 
@@ -97,7 +97,8 @@ def main():
             metrics = collect_metrics(svc)
             metrics_cache[svc] = metrics
 
-            obs[svc] = build_observation(svc, metrics, metrics_cache)
+            obs[svc] = build_observation(svc, metrics)
+
 
         try:
             actions = agent.predict(obs)
@@ -147,7 +148,8 @@ def main():
 
             current = int(m["desired"])
             delta = max(-1, min(1, actions[svc]))
-            target = max(MIN_REPLICAS, min(MAX_REPLICAS, current + delta))
+            min_r = MIN_REPLICAS.get(svc, 1)
+            target = max(min_r, min(MAX_REPLICAS, current + delta))
 
             log_scale_decision(
                 svc=svc,
