@@ -18,7 +18,22 @@ def index():
         return redirect(url_for("index"))
     else:
         quotes = requests.get(f"{API_URL}/api/quotes").json()
-        return render_template("index.html", quotes=quotes)
+        return render_template("index.html",quotes=quotes)
+
+@app.errorhandler(500)
+def internal_error(error):
+    return render_template("error.html", 
+                         error_code=500,
+                         error_message="Internal Server Error"), 500
+
+
+@app.errorhandler(503)
+def service_unavailable(error):
+    return render_template("error.html", 
+                         error_code=503,
+                         error_message="Service Temporarily Unavailable"), 503
+
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5002)

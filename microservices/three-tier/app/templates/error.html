@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="APJ Abdul Kalam Technological University e-Gov Platform">
+    <meta name="author" content="">
+
+    <title>APJ Abdul Kalam Technological University</title>
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+
+    <link rel="icon" type="image/x-icon" href="https://app.ktu.edu.in/images/ktu-fav.ico" />
+
+    <style type="text/css">
+        /* Reconstructed Custom CSS (theme.css replica) 
+           Based on the structure and standard Bootstrap overrides 
+        */
+        
+        body {
+            padding-top: 60px !important; /* Adjusted for fixed navbar */
+            background-color: #f8f8f8;
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        }
+
+        /* Navbar Styling */
+        .navbar-default {
+            background-color: #fff;
+            border-bottom: 1px solid #e7e7e7;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .navbar-brand {
+            height: auto;
+            padding: 10px 15px;
+            font-weight: 500;
+            color: #555 !important;
+        }
+
+        .menuclass a {
+            color: #777;
+            font-weight: bold;
+            font-size: 13px;
+        }
+        
+        .menuclass.active a {
+            background-color: #e7e7e7 !important;
+            color: #333 !important;
+        }
+
+        /* Login Icons Styling (The circular icons) */
+        .login-icon {
+            width: 50px;
+            height: 50px;
+            border: 2px solid #3ab0e2; /* Default blue */
+            border-radius: 50%;
+            text-align: center;
+            line-height: 46px; /* Vertically center the glyphicon */
+            font-size: 20px;
+            color: #3ab0e2;
+            float: left;
+            margin-right: 15px !important;
+            background: #fff;
+        }
+
+        /* Specific colors handled inline in HTML, but defaults set here */
+        .list-group-item-heading {
+            margin-top: 10px;
+            margin-bottom: 5px;
+            font-size: 18px;
+        }
+
+        .p-text {
+            color: #666;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-left: 65px; /* Push text to right of icon */
+        }
+
+        .list-group-item {
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        
+        .list-group-item.active {
+            background-color: #f5f5f5;
+            border-color: #ddd;
+            color: #333;
+        }
+
+        /* Login Form Panel */
+        .panel-default {
+            border-color: #ddd;
+            box-shadow: 0 1px 1px rgba(0,0,0,.05);
+        }
+        
+        .panel-heading {
+            color: #333;
+            background-color: #f5f5f5;
+            border-color: #ddd;
+            padding: 10px 15px;
+        }
+
+        .form-signin .form-control {
+            height: 40px;
+            font-size: 14px;
+        }
+
+        .btn-success {
+            background-color: #5cb85c;
+            border-color: #4cae4c;
+            padding: 10px;
+            font-weight: bold;
+        }
+
+		.error {
+			height: 100vh;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			align-items: center;
+			background: #f7f9fc;
+			font-family: Arial, Helvetica, sans-serif;
+			text-align: center;
+			}
+
+			.error h1 {
+			font-size: 10rem;
+			margin: 0;
+			color: #1f3c88;
+			letter-spacing: 8px;
+			}
+
+			.error p {
+			font-size: 1.5rem;
+			margin-top: 10px;
+			color: #444;
+			}
+
+
+        /* Footer */
+        #footer {
+            height: 60px;
+            background-color: #f8f8f8;
+            border-top: 1px solid #e7e7e7;
+            padding-top: 20px;
+            margin-top: 20px;
+        }
+        
+        .text-muted {
+            color: #777;
+        }
+        
+        /* Mobile adjustments */
+        @media (max-width: 768px) {
+            .navbar-brand {
+                font-size: 16px !important;
+            }
+            .p-text {
+                margin-left: 0;
+            }
+            .login-icon {
+                float: none;
+                display: block;
+                margin-bottom: 10px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="navbar navbar-default navbar-fixed-top" role="navigation">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target=".navbar-collapse">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand" href="#" style="line-height: 17px; font-size: 20px; padding: 10px 15px;">
+                    <img height="40" src="https://app.ktu.edu.in/images/ktu-logo.png" alt="Logo" style="display:inline; margin-right:5px;">
+                    e-Gov Platform for APJ Abdul Kalam Technological University
+                </a>
+            </div>
+            <div class="navbar-collapse collapse">
+                <ul class="nav navbar-nav navbar-right menu">
+                    <li id="1" class="menuclass active"><a href="#">Home </a></li>
+                    <li id="8" class="menuclass"><a href="#">Research </a></li>
+                    <li id="4" class="menuclass"><a href="#">FAQ </a></li>
+                    <li id="6" class="menuclass"><a href="#">Contact Us </a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <div class="row">
+            
+            <div class="col-sm-9" style="margin-top: 40px;">
+				<div class="error">
+					<h1>{{error_code}}</h1>
+					<p>{{error_message}}</p>
+				</div>
+
+
+                
+            </div>
+
+          
+            
+        </div> </div> <div id="footer">
+        <div class="container" style="width: auto;">
+            <div class="col-sm-12">
+                <p class="text-muted" align="center">Copyright &copy; APJ Abdul Kalam Technological University 2014.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+
+    <script type="text/javascript">
+        $(document).ready(function(){
+            // Replicates the active menu logic from the original
+            var menu = null;
+            if(menu==null){
+                menu='1';
+                $('.menu').find('#1').addClass('active');
+            }
+            $('.menu').removeClass('active');
+            $('.menu').find('#'+menu).addClass('active');
+
+            // Forgot password toggle
+            $("#forgot-password").click(function(e) {
+                e.preventDefault();
+                alert("This is a static clone.");
+            });
+        });
+    </script> 
+</body>
+</html>
