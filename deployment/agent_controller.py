@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 import sys
 import os
@@ -6,34 +7,32 @@ import subprocess
 import requests
 import csv
 import numpy as np
-from datetime import datetime
 
-# -------------------------------------------------
-# Force project root into PYTHONPATH
-# -------------------------------------------------
+from datetime import datetime, timedelta, timezone
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def ist_time_str():
+    return datetime.now(IST).strftime("%H:%M:%S")
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
-# -------------------------------------------------
-# Imports
-# -------------------------------------------------
 from marl.inference import AuraInference
-from deployment.builder import collect_metrics, build_observation
+from deployment.builder import collect_metrics, build_observation, _hist, RPS_HISTORY
 
-# -------------------------------------------------
-# Config
-# -------------------------------------------------
-CHECKPOINT_DIR = os.environ.get(
-    "AURA_CHECKPOINT_DIR",
-    "marl/qmix_trained"
-)
-
+CHECKPOINT_DIR = os.environ.get("AURA_CHECKPOINT_DIR", "marl/qmix_trained")
 PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:9090")
 NAMESPACE = "default"
 
-SERVICES = ["api", "app","db"]
+SERVICES = ["api", "app", "db"]
 
-MIN_REPLICAS = 1
+MIN_REPLICAS = {
+    "api": 2,
+    "app": 3,
+    "db": 1
+}
+
 MAX_REPLICAS = 10
 COOLDOWN_SEC = 30
 
@@ -42,77 +41,34 @@ SHADOW_MODE = os.environ.get("AURA_SHADOW_MODE", "true").lower() == "true"
 LOG_DIR = "logs"
 LOG_FILE = os.path.join(LOG_DIR, "shadow_decisions.csv")
 
-# -------------------------------------------------
-# Prometheus helper
-# -------------------------------------------------
-# def prom(query: str) -> float:
-#     try:
-#         r = requests.get(
-#             f"{PROMETHEUS_URL}/api/v1/query",
-#             params={"query": query},
-#             timeout=5,
-#         ).json()
-#         if r.get("data", {}).get("result"):
-#             return float(r["data"]["result"][0]["value"][1])
-#     except Exception as e:
-#         print("⚠️ Prometheus error:", e)
-#     return 0.0
 
-# -------------------------------------------------
-# Metric collection (raw Prometheus → dict)
-# -------------------------------------------------
-# def collect_metrics(service: str) -> dict:
-#     return {
-#         "cpu": prom(
-#             f'rate(container_cpu_usage_seconds_total{{pod=~"{service}-.*"}}[1m])'
-#         ),
-#         "memory": prom(
-#             f'container_memory_working_set_bytes{{pod=~"{service}-.*"}}'
-#         ) / 1e9,
-#         "rps": prom(
-#             f'rate(http_requests_total{{service="{service}"}}[1m])'
-#         ),
-#         "error_rate": prom(
-#             f'rate(http_requests_total{{service="{service}",status=~"5.."}}[1m])'
-#         ),
-#         "p50": prom(
-#             f'histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{{service="{service}"}}[5m])) by (le))'
-#         ),
-#         "p95": prom(
-#             f'histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{{service="{service}"}}[5m])) by (le))'
-#         ),
-#         "p99": prom(
-#             f'histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{{service="{service}"}}[5m])) by (le))'
-#         ),
-#         "desired": prom(
-#             f'kube_deployment_spec_replicas{{deployment="{service}"}}'
-#         ),
-#         "ready": prom(
-#             f'kube_deployment_status_replicas_available{{deployment="{service}"}}'
-#         ),
-#     }
+def log_scale_decision(svc, m, current, delta, target, shadow):
+    print(
+        f"[{svc.upper():<4}] "
+        f"Δ={delta:+d} "
+        f"{current}→{target} | "
+        f"p95={m.get('p95', 0):.3f} "
+        f"p99={m.get('p99', 0):.3f} | "
+        f"cpu={m.get('cpu', 0)*100:.1f}% "
+        f"rps={m.get('rps', 0):.1f} | "
+        f"{'SHADOW' if shadow else 'LIVE'}",
+        flush=True
+    )
 
-# -------------------------------------------------
-# Scaling helper
-# -------------------------------------------------
 def scale(service: str, replicas: int):
-    replicas = max(MIN_REPLICAS, min(MAX_REPLICAS, replicas))
+    min_r = MIN_REPLICAS.get(service, 1)
+    max_r = MAX_REPLICAS
+
+    clamped = max(min_r, min(max_r, replicas))
+
+    if clamped != replicas:
+        print(f"⚠️  Clamped {service} replicas {replicas} → {clamped}")
+
     subprocess.run(
-        [
-            "kubectl",
-            "-n",
-            NAMESPACE,
-            "scale",
-            "deployment",
-            service,
-            f"--replicas={replicas}",
-        ],
+        ["kubectl", "-n", NAMESPACE, "scale", "deployment", service, f"--replicas={clamped}"],
         check=False,
     )
 
-# -------------------------------------------------
-# Main loop
-# -------------------------------------------------
 def main():
     print("✅ AURA Agent Controller Started")
     print("🎭 Shadow mode:", SHADOW_MODE)
@@ -120,17 +76,8 @@ def main():
 
     os.makedirs(LOG_DIR, exist_ok=True)
 
-    if not os.path.exists(LOG_FILE):
-        with open(LOG_FILE, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                "timestamp",
-                "service",
-                "current_replicas",
-                "action_delta",
-                "target_replicas",
-                "p95_latency"
-            ])
+    with open(LOG_FILE, "w") as f:
+        f.write("time     | svc | cur | Δ  | tgt | p99\n")
 
     agent = AuraInference(CHECKPOINT_DIR)
     print("✅ MARL inference loaded")
@@ -143,58 +90,91 @@ def main():
         if time.time() - last_action_time < COOLDOWN_SEC:
             continue
 
-        # -------------------------------------------------
-        # Build observations (SIMULATOR-EQUIVALENT)
-        # -------------------------------------------------
         obs = {}
         metrics_cache = {}
 
         for svc in SERVICES:
             metrics = collect_metrics(svc)
             metrics_cache[svc] = metrics
+
             obs[svc] = build_observation(svc, metrics)
 
-        # -------------------------------------------------
-        # Inference
-        # -------------------------------------------------
+
         try:
-            actions = agent.predict(obs)  # returns replica deltas
+            actions = agent.predict(obs)
         except Exception as e:
             print("❌ Inference failed:", e)
             continue
 
-        # -------------------------------------------------
-        # Apply / log actions
-        # -------------------------------------------------
+        # ==============================
+        # VETOES (No new observations)
+        # ==============================
+
         for svc in SERVICES:
-            current = int(metrics_cache[svc]["ready"])
-            delta = actions[svc]
-            target = current + delta
-            target = max(MIN_REPLICAS, min(MAX_REPLICAS, target))
+            m = metrics_cache[svc]
 
-            p95 = metrics_cache[svc]["p95"]
+            # Veto 1: Elasticity check (don't scale if not helping)
+            if actions[svc] > 0:  # Trying to scale up
+                rps_h = _hist(RPS_HISTORY, svc)
+                if len(rps_h) >= 2:
+                    rps_gain = m["rps"] - rps_h[-2]
 
-            print(
-                f"[{svc.upper()}] curr={current} "
-                f"delta={delta} target={target} p95={p95:.2f}"
+                    # If last 2 cycles didn't increase RPS, scaling is futile
+                    if rps_gain <= 0 and m["rps"] > 100:
+                        print(f"⚠️ ELASTICITY VETO: {svc} scaling futile (Δrps={rps_gain:.1f})")
+                        actions[svc] = 0
+
+            # Veto 2: Tier-coupled (don't scale APP if API is bottleneck)
+            if svc == "app" and actions[svc] > 0:
+                if "api" in metrics_cache:
+                    api_queue = metrics_cache["api"]["queue"]
+                    api_replicas = metrics_cache["api"]["desired"]
+
+                    # API maxed + high queue = bottleneck upstream
+                    if api_replicas >= MAX_REPLICAS and api_queue > 500:
+                        print(f"⚠️ TIER VETO: API bottleneck (q={api_queue:.0f}), blocking APP scale-up")
+                        actions[svc] = 0
+            if actions[svc] < 0:  # Trying to scale down
+                if m["p99"] > 500:  # 500ms threshold
+                    print(f"⚠️ LATENCY VETO: {svc} p99={m['p99']:.0f}ms, blocking scale-down")
+                    actions[svc] = 0
+
+        # ==============================
+        # Apply actions
+        # ==============================
+
+        for svc in SERVICES:
+            m = metrics_cache[svc]
+
+            current = int(m["desired"])
+            delta = max(-1, min(1, actions[svc]))
+            min_r = MIN_REPLICAS.get(svc, 1)
+            target = max(min_r, min(MAX_REPLICAS, current + delta))
+
+            log_scale_decision(
+                svc=svc,
+                m=m,
+                current=current,
+                delta=delta,
+                target=target,
+                shadow=SHADOW_MODE
             )
 
-            with open(LOG_FILE, "a", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    datetime.utcnow().isoformat(),
-                    svc,
-                    current,
-                    delta,
-                    target,
-                    p95
-                ])
+            with open(LOG_FILE, "a") as f:
+                f.write(
+                    f"{ist_time_str():<8} | "
+                    f"{svc:<3} | "
+                    f"{current:>3} | "
+                    f"{delta:+2} | "
+                    f"{target:>3} | "
+                    f"{m.get('p99', 0.0):>7.4f}\n"
+                )
 
-            if not SHADOW_MODE:
+            if not SHADOW_MODE and target != current:
                 scale(svc, target)
 
+        print("\n" + "="*80 + "\n")
         last_action_time = time.time()
 
-# -------------------------------------------------
 if __name__ == "__main__":
     main()
