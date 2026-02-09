@@ -114,27 +114,23 @@ def collect_metrics(service: str, ns="default"):
     if p95 == 0.0: p95 = avg_latency * 2.5
     if p99 == 0.0: p99 = avg_latency * 4.0
 
-    # FIXED: Real queue pressure (not just downstream_rq_active)
-    queue = q(f'''
-      avg(envoy_http_downstream_rq_active{{
-        namespace="{ns}",
-        job="{service}",
-        envoy_http_conn_manager_prefix="ingress"
-      }})
-      +
-      clamp_min(
-        avg(envoy_cluster_upstream_cx_active{{
-          namespace="{ns}",
-          envoy_cluster_name="{service}"
-        }})
-        -
-        avg(envoy_cluster_upstream_rq_active{{
-          namespace="{ns}",
-          envoy_cluster_name="{service}"
-        }}),
-        0
-      )
-    ''')
+    # Unified queue metric: downstream active requests (normalized)
+    if service == "db":
+        # DB is TCP proxy, use TCP connection metrics
+        queue = q(f'''
+          avg(envoy_tcp_downstream_cx_active{{
+            namespace="{ns}",
+            job="{service}"
+          }})
+        ''')
+    else:
+        queue = q(f'''
+          avg(envoy_http_downstream_rq_active{{
+            namespace="{ns}",
+            job="{service}",
+            envoy_http_conn_manager_prefix="ingress"
+          }})
+        ''')
 
     return {
         "cpu": q(f'''
@@ -152,8 +148,6 @@ def collect_metrics(service: str, ns="default"):
             resource="cpu"
           }})
         '''),
-
-
         "memory": q(f'''
           sum(container_memory_working_set_bytes{{
             namespace="{ns}",
@@ -168,23 +162,12 @@ def collect_metrics(service: str, ns="default"):
             resource="memory"
           }})
         '''),
-
         "rps": rps,
         "queue": queue,
-
-        "queue": q(f'''
-          avg(envoy_http_downstream_rq_active{{
-            namespace="{ns}",
-            job="{service}",
-            envoy_http_conn_manager_prefix="ingress"
-          }})
-        '''),
-
         # Latency in ms — NO MULTIPLIERS
         "p50": p50,
         "p95": p95,
         "p99": p99,
-
         "error": q(f'''
           sum(rate(envoy_http_downstream_rq_xx{{
             namespace="{ns}",
@@ -193,9 +176,7 @@ def collect_metrics(service: str, ns="default"):
             envoy_response_code_class="5"
           }}[1m]))
         '''),
-
         "desired": q(f'kube_deployment_spec_replicas{{deployment="{service}"}}'),
-
         "ready": q(f'''
           sum(kube_pod_status_ready{{
             namespace="{ns}",
