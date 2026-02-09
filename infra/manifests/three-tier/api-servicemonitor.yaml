@@ -3,6 +3,8 @@ kind: ServiceMonitor
 metadata:
   name: envoy-metrics
   namespace: monitoring
+  labels:
+    release: kube-prom
 spec:
   selector:
     matchLabels:
