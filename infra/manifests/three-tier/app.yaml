@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: project-app:gevent
+        image: project-app:local
         imagePullPolicy: IfNotPresent
         env:
           - name: API_URL
