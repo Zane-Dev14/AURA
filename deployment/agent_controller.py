@@ -114,7 +114,7 @@ def main():
         try:
             actions = agent.predict(obs)
         except Exception as e:
-            print("❌ Inference failed:", e)
+            print(" Inference failed:", e)
             continue
 
         # ==============================
