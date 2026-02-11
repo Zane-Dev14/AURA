@@ -1,21 +1,41 @@
+"""
+Production load test for AURA 3-tier quotes application.
+
+Simulates realistic user behavior with 3 user types:
+- Light users (70%): Occasional homepage views
+- Regular users (25%): Browse quotes, view homepage
+- Power users (5%): Frequent reads + writes
+
+FIXED ENDPOINTS (matching actual API):
+- GET /           → Homepage (via app service)
+- GET /api/quotes → List all quotes (via app→api)
+- POST /api/quotes → Create new quote (power users only)
+
+Load shape: ProductionDayShape (60-min phased)
+- 0-5min:   ramp to 500 users
+- 5-10min:  hold 500
+- 10-15min: ramp to 800
+- 15-20min: hold 800
+- 20-25min: spike to 2000
+- 25-30min: peak 2000
+- 30-35min: drop to 100
+- 35-60min: steady 100
+"""
+
 from locust import HttpUser, task, between, LoadTestShape
 import random
 import time
 
-from locust import HttpUser, task, between
-import random
-import time
 
 class UniversityUser(HttpUser):
     """
     Simulates 3 types of users:
-    - Light (70%)
-    - Regular (25%)
-    - Power (5%)
+    - Light (70%): wait 3-8s between requests
+    - Regular (25%): wait 1-3s between requests
+    - Power (5%): wait 0.1-0.5s between requests
     """
 
-    # Default, will be overridden safely
-    wait_time = between(1, 3)
+    wait_time = between(1, 3)  # Default, overridden in on_start
 
     def on_start(self):
         r = random.random()
@@ -34,32 +54,40 @@ class UniversityUser(HttpUser):
 
     @task(10)
     def view_homepage(self):
+        """All users view the homepage."""
         self.client.get("/", name="Homepage")
 
-    @task(3)
-    def read_items(self):
+    @task(5)
+    def read_quotes(self):
+        """Regular and power users fetch the quotes list."""
         if self.user_type in ["regular", "power"]:
-            self.client.get("/api/items", name="List Items")
+            self.client.get("/api/quotes", name="List Quotes")
 
     @task(2)
-    def search(self):
+    def browse_quotes(self):
+        """Regular and power users browse quotes (same endpoint, different name for metrics)."""
         if self.user_type in ["regular", "power"]:
-            self.client.get("/api/search?q=test", name="Search")
+            self.client.get("/api/quotes", name="Browse Quotes")
 
     @task(1)
-    def post_action(self):
+    def create_quote(self):
+        """Power users create new quotes."""
         if self.user_type == "power":
             self.client.post(
-                "/api/action",
-                json={"data": "test"},
-                name="Post Action"
+                "/api/quotes",
+                json={
+                    "text": f"Test quote {random.randint(1, 10000)}",
+                    "author": f"User_{random.randint(1, 100)}"
+                },
+                name="Create Quote"
             )
 
     @task(2)
     def refresh_spam(self):
+        """Power users rapidly refresh the quotes list."""
         if self.user_type == "power":
             for _ in range(random.randint(3, 6)):
-                self.client.get("/api/items", name="Refresh Spam")
+                self.client.get("/api/quotes", name="Refresh Spam")
                 time.sleep(0.1)
 
 

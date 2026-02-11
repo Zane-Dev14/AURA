@@ -23,12 +23,12 @@ spec:
         ports:
           - containerPort: 5002
         resources:
-            requests:
-                cpu: 500m
-                memory: 512Mi
-            limits:
-                cpu: 1000m
-                memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
 
       - name: envoy
         image: envoyproxy/envoy:v1.29-latest
