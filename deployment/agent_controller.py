@@ -1,6 +1,3 @@
-P99_SLO = float(os.environ.get("AURA_P99_SLO", "500"))  # ms
-P99_WINDOW = os.environ.get("AURA_P99_WINDOW", "5m")
-QUEUE_METRIC_ENABLED = os.environ.get("AURA_QUEUE_METRIC_ENABLED", "true").lower() == "true"
 
 #!/usr/bin/env python3
 import sys
@@ -10,8 +7,10 @@ import subprocess
 import requests
 import csv
 import numpy as np
-
 from datetime import datetime, timedelta, timezone
+P99_SLO = float(os.environ.get("AURA_P99_SLO", "500"))  # ms
+P99_WINDOW = os.environ.get("AURA_P99_WINDOW", "5m")
+QUEUE_METRIC_ENABLED = os.environ.get("AURA_QUEUE_METRIC_ENABLED", "true").lower() == "true"
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
