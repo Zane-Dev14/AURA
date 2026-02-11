@@ -23,6 +23,7 @@ Load shape: ProductionDayShape (60-min phased)
 """
 
 from locust import HttpUser, task, between, LoadTestShape
+from types import MethodType
 import random
 import time
 
@@ -42,15 +43,15 @@ class UniversityUser(HttpUser):
 
         if r < 0.70:
             self.user_type = "light"
-            self.wait_time = between(3, 8)
+            self.wait_time = MethodType(between(3, 8), self)
 
         elif r < 0.95:
             self.user_type = "regular"
-            self.wait_time = between(1, 3)
+            self.wait_time = MethodType(between(1, 3), self)
 
         else:
             self.user_type = "power"
-            self.wait_time = between(0.1, 0.5)
+            self.wait_time = MethodType(between(0.1, 0.5), self)
 
     @task(10)
     def view_homepage(self):
