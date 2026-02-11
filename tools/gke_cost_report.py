@@ -751,17 +751,21 @@ def main():
     parser.add_argument(
         "--output-dir",
         type=str,
-        default=str(OUTPUT_DIR),
-        help=f"Output directory (default: {OUTPUT_DIR})"
+        default="docs/Final Results",
+        help="Output directory (default: docs/Final Results)"
     )
     args = parser.parse_args()
     
-    global TEST_DURATION_MINUTES, OUTPUT_DIR
-    TEST_DURATION_MINUTES = args.duration
-    OUTPUT_DIR = Path(args.output_dir)
+    # Use args values (don't modify globals)
+    test_duration = args.duration
+    output_dir = Path(args.output_dir)
     
     # Ensure output directory exists
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Override global for collection function
+    global TEST_DURATION_MINUTES
+    TEST_DURATION_MINUTES = test_duration
     
     # Collect metrics
     result, timeseries = collect_all_metrics(args.mode)
@@ -770,23 +774,23 @@ def main():
     file_ts = datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')
     
     # Save JSON
-    json_file = OUTPUT_DIR / f"{args.mode}_metrics_{file_ts}.json"
+    json_file = output_dir / f"{args.mode}_metrics_{file_ts}.json"
     with open(json_file, "w") as f:
         json.dump(result, f, indent=2)
     print(f"\n[OUTPUT] Metrics saved to: {json_file}")
     
     # Export CSVs
     print("\n[OUTPUT] Exporting time series CSVs...")
-    export_timeseries_csv(timeseries, args.mode, OUTPUT_DIR)
+    export_timeseries_csv(timeseries, args.mode, output_dir)
     
     # Summary
     print(f"\n{'='*60}")
     print("COLLECTION COMPLETE")
     print(f"{'='*60}")
     print(f"Mode: {args.mode}")
-    print(f"Duration: {TEST_DURATION_MINUTES} minutes")
+    print(f"Duration: {test_duration} minutes")
     print(f"Total queries executed: {len(QUERIES_LOG)}")
-    print(f"Output directory: {OUTPUT_DIR}")
+    print(f"Output directory: {output_dir}")
     
     # Quick validation
     print("\n[VALIDATION]")
