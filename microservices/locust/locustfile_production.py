@@ -101,14 +101,14 @@ class ProductionDayShape(LoadTestShape):
     def __init__(self):
         super().__init__()
         self.phases = [
-            (300, 500, 50),    # 0-5min ramp to 500
-            (600, 500, 20),    # 5-10min hold
-            (900, 800, 50),    # 10-15min ramp to 800
-            (1200, 800, 20),   # 15-20min hold
-            (1500, 2000, 200), # 20-25min ramp to 2000 (spike)
-            (1800, 2000, 50),  # 25-30min peak
-            (2100, 100, 200),  # 30-35min drop to 100
-            (3600, 100, 10),   # 35-60min night steady
+            (300, 2000, 100),    # 0-5min ramp to 500
+            (600, 5000, 200),    # 5-10min hold
+            (900, 8000, 300),    # 10-15min ramp to 800
+            (1200, 8000, 300),   # 15-20min hold
+            (1500, 16000, 500), # 20-25min ramp to 2000 (spike)
+            (1800, 16000, 500),  # 25-30min peak
+            (2100, 5000, 300),  # 30-35min drop to 100
+            (3600, 2000, 100),   # 35-60min night steady
         ]
 
     def tick(self):
