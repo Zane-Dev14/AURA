@@ -35,7 +35,7 @@ MIN_REPLICAS = {
     "db": 1
 }
 
-MAX_REPLICAS = 10
+MAX_REPLICAS = 5
 COOLDOWN_SEC = 30
 
 SHADOW_MODE = os.environ.get("AURA_SHADOW_MODE", "true").lower() == "true"

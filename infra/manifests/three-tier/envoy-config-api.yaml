@@ -10,7 +10,7 @@ data:
         - name: envoy.resource_monitors.global_downstream_max_connections
           typed_config:
             "@type": type.googleapis.com/envoy.extensions.resource_monitors.downstream_connections.v3.DownstreamConnectionsConfig
-            max_active_downstream_connections: 1000
+            max_active_downstream_connections: 500
       actions:
         - name: envoy.overload_actions.stop_accepting_connections
           triggers:
@@ -49,14 +49,14 @@ data:
                       prefix: "/"
                     route:
                       cluster: api
-                      timeout: 5s
+                      timeout: 10s
                       retry_policy:
                         retry_on: 5xx
-                        num_retries: 2
-                        per_try_timeout: 2s
+                        num_retries: 1
+                        per_try_timeout: 5s
                         retry_back_off:
-                          base_interval: 0.05s
-                          max_interval: 0.5s
+                          base_interval: 0.1s
+                          max_interval: 1s
 
               http_filters:
               - name: envoy.filters.http.router
@@ -70,10 +70,10 @@ data:
         circuit_breakers:
           thresholds:
           - priority: DEFAULT
-            max_connections: 2048
-            max_pending_requests: 1024
-            max_requests: 2048
-            max_retries: 3
+            max_connections: 512
+            max_pending_requests: 256
+            max_requests: 512
+            max_retries: 2
         load_assignment:
           cluster_name: api
           endpoints:

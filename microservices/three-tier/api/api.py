@@ -18,8 +18,8 @@ DB_NAME = os.getenv("DB_NAME", "quotesdb")
 engine = create_engine(
     f"mysql+mysqldb://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}",
     poolclass=QueuePool,
-    pool_size=100,
-    max_overflow=100,
+    pool_size=20,
+    max_overflow=30,
     pool_timeout=10,
     pool_recycle=1800,
     pool_pre_ping=True,

@@ -17,7 +17,7 @@ spec:
       containers:
       - name: db
         image: project-db:local
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Never
         command:
             - /bin/bash
             - -c
@@ -59,8 +59,36 @@ spec:
             cpu: 200m
             memory: 512Mi
           limits:
-            cpu: 300m
+            cpu: 500m
             memory: 768Mi
+        readinessProbe:
+          exec:
+            command:
+              - mysqladmin
+              - ping
+              - -h
+              - localhost
+              - -u
+              - root
+              - -proot
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          exec:
+            command:
+              - mysqladmin
+              - ping
+              - -h
+              - localhost
+              - -u
+              - root
+              - -proot
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
 
       - name: envoy
         image: envoyproxy/envoy:v1.29-latest
