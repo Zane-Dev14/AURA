@@ -53,7 +53,7 @@ data:
                       retry_policy:
                         retry_on: 5xx
                         num_retries: 2
-                        per_try_timeout: 1s
+                        per_try_timeout: 2s
                         retry_back_off:
                           base_interval: 0.05s
                           max_interval: 0.5s
@@ -65,7 +65,7 @@ data:
                       retry_policy:
                         retry_on: 5xx
                         num_retries: 2
-                        per_try_timeout: 1s
+                        per_try_timeout: 2s
                         retry_back_off:
                           base_interval: 0.05s
                           max_interval: 0.5s
@@ -77,15 +77,15 @@ data:
 
       clusters:
       - name: app
-        connect_timeout: 0.5s
+        connect_timeout: 1s
         type: STATIC
         circuit_breakers:
           thresholds:
           - priority: DEFAULT
-            max_connections: 800
-            max_pending_requests: 400
-            max_requests: 800
-            max_retries: 0
+            max_connections: 2048
+            max_pending_requests: 1024
+            max_requests: 2048
+            max_retries: 3
         load_assignment:
           cluster_name: app
           endpoints:
@@ -97,16 +97,16 @@ data:
                     port_value: 5002
 
       - name: api
-        connect_timeout: 0.5s
+        connect_timeout: 1s
         type: STRICT_DNS
         lb_policy: ROUND_ROBIN
         circuit_breakers:
           thresholds:
           - priority: DEFAULT
-            max_connections: 600
-            max_pending_requests: 300
-            max_requests: 600
-            max_retries: 0
+            max_connections: 2048
+            max_pending_requests: 1024
+            max_requests: 2048
+            max_retries: 3
         load_assignment:
           cluster_name: api
           endpoints:

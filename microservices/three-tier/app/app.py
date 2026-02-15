@@ -33,12 +33,13 @@ SESSION.mount("https://", adapter)
 def index():
     if request.method == "POST":
         try:
+            payload = {
+                "text": request.form.get("quote", ""),
+                "author": request.form.get("author") or None,
+            }
             SESSION.post(
                 f"{API_URL}/api/quotes",
-                json={
-                    "quote": request.form.get("quote", ""),
-                    "author": request.form.get("author", ""),
-                },
+                json=payload,
                 timeout=2.0,
             )
         except Exception:
