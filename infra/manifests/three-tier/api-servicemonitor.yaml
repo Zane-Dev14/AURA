@@ -4,7 +4,8 @@ metadata:
   name: envoy-metrics
   namespace: monitoring
   labels:
-    release: kube-prom
+    release: kube-prometheus-stack
+
 spec:
   selector:
     matchLabels:
