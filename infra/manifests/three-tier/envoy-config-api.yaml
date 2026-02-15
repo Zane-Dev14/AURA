@@ -50,6 +50,13 @@ data:
                     route:
                       cluster: api
                       timeout: 5s
+                      retry_policy:
+                        retry_on: 5xx
+                        num_retries: 2
+                        per_try_timeout: 1s
+                        retry_back_off:
+                          base_interval: 0.05s
+                          max_interval: 0.5s
 
               http_filters:
               - name: envoy.filters.http.router

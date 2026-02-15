@@ -7,8 +7,10 @@ import subprocess
 import requests
 import csv
 import numpy as np
-
 from datetime import datetime, timedelta, timezone
+P99_SLO = float(os.environ.get("AURA_P99_SLO", "500"))  # ms
+P99_WINDOW = os.environ.get("AURA_P99_WINDOW", "5m")
+QUEUE_METRIC_ENABLED = os.environ.get("AURA_QUEUE_METRIC_ENABLED", "true").lower() == "true"
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -82,6 +84,7 @@ def main():
     agent = AuraInference(CHECKPOINT_DIR)
     print("✅ MARL inference loaded")
 
+
     last_action_time = 0.0
 
     while True:
@@ -97,13 +100,20 @@ def main():
             metrics = collect_metrics(svc)
             metrics_cache[svc] = metrics
 
-            obs[svc] = build_observation(svc, metrics)
+            # Optionally override queue metric
+            if QUEUE_METRIC_ENABLED:
+                obs[svc] = build_observation(svc, metrics)
+            else:
+                # fallback: set queue to 0
+                metrics_copy = dict(metrics)
+                metrics_copy["queue"] = 0.0
+                obs[svc] = build_observation(svc, metrics_copy)
 
 
         try:
             actions = agent.predict(obs)
         except Exception as e:
-            print("❌ Inference failed:", e)
+            print(" Inference failed:", e)
             continue
 
         # ==============================
@@ -118,8 +128,6 @@ def main():
                 rps_h = _hist(RPS_HISTORY, svc)
                 if len(rps_h) >= 2:
                     rps_gain = m["rps"] - rps_h[-2]
-
-                    # If last 2 cycles didn't increase RPS, scaling is futile
                     if rps_gain <= 0 and m["rps"] > 100:
                         print(f"⚠️ ELASTICITY VETO: {svc} scaling futile (Δrps={rps_gain:.1f})")
                         actions[svc] = 0
@@ -129,14 +137,28 @@ def main():
                 if "api" in metrics_cache:
                     api_queue = metrics_cache["api"]["queue"]
                     api_replicas = metrics_cache["api"]["desired"]
-
-                    # API maxed + high queue = bottleneck upstream
                     if api_replicas >= MAX_REPLICAS and api_queue > 500:
                         print(f"⚠️ TIER VETO: API bottleneck (q={api_queue:.0f}), blocking APP scale-up")
                         actions[svc] = 0
-            if actions[svc] < 0:  # Trying to scale down
-                if m["p99"] > 500:  # 500ms threshold
-                    print(f"⚠️ LATENCY VETO: {svc} p99={m['p99']:.0f}ms, blocking scale-down")
+
+            # Veto 3: Smoothed p99 SLO (scale-down only if below SLO)
+            if actions[svc] < 0:
+                # Smoothed p99: avg_over_time(histogram_quantile(0.99, ...)[P99_WINDOW])
+                try:
+                    prom_query = f"avg_over_time(histogram_quantile(0.99, sum by (le) (increase(envoy_http_downstream_rq_time_bucket{{namespace=\"{NAMESPACE}\",job=\"{svc}\",envoy_http_conn_manager_prefix=\"ingress\"}}[2m])))[{P99_WINDOW}])"
+                    smoothed_p99 = requests.get(
+                        f"{PROMETHEUS_URL}/api/v1/query",
+                        params={"query": prom_query},
+                        timeout=5
+                    ).json()
+                    if smoothed_p99["data"]["result"]:
+                        p99_val = float(smoothed_p99["data"]["result"][0]["value"][1])
+                    else:
+                        p99_val = m["p99"]
+                except Exception:
+                    p99_val = m["p99"]
+                if p99_val > P99_SLO:
+                    print(f"⚠️ SLO VETO: {svc} smoothed p99={p99_val:.0f}ms > SLO={P99_SLO}ms, blocking scale-down")
                     actions[svc] = 0
 
         # ==============================

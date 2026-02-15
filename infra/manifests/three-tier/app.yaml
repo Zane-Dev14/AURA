@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: project-app:gevent
+        image: project-app:local
         imagePullPolicy: IfNotPresent
         env:
           - name: API_URL
@@ -23,12 +23,12 @@ spec:
         ports:
           - containerPort: 5002
         resources:
-            requests:
-                cpu: 500m
-                memory: 512Mi
-            limits:
-                cpu: 1000m
-                memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 150m
+            memory: 384Mi
 
       - name: envoy
         image: envoyproxy/envoy:v1.29-latest
