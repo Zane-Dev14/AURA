@@ -11,15 +11,15 @@ FIXED ENDPOINTS (matching actual API):
 - GET /api/quotes → List all quotes (via app→api)
 - POST /api/quotes → Create new quote (power users only)
 
-Load shape: ProductionDayShape (60-min phased)
-- 0-5min:   ramp to 500 users
-- 5-10min:  hold 500
-- 10-15min: ramp to 800
-- 15-20min: hold 800
-- 20-25min: spike to 2000
-- 25-30min: peak 2000
-- 30-35min: drop to 100
-- 35-60min: steady 100
+Load shape: ProductionDayShape (30-min phased)
+- 0-3min:   ramp to 500 users
+- 3-8min:   hold 500
+- 8-11min:  ramp to 800
+- 11-16min: hold 800
+- 16-19min: spike to 2000
+- 19-24min: sustain 2000
+- 24-27min: drop to 100
+- 27-30min: steady 100 → stop
 """
 
 from locust import HttpUser, task, between, LoadTestShape
@@ -36,14 +36,14 @@ class UniversityUser(HttpUser):
     - Power (5%): wait 0.1-0.5s between requests
     """
 
-    wait_time = between(1, 3)  # Default, overridden in on_start
+    wait_time = between(1, 2)  # Default, overridden in on_start
 
     def on_start(self):
         r = random.random()
 
         if r < 0.70:
             self.user_type = "light"
-            self.wait_time = MethodType(between(3, 8), self)
+            self.wait_time = MethodType(between(0.5, 1.5), self)
 
         elif r < 0.95:
             self.user_type = "regular"
@@ -94,21 +94,21 @@ class UniversityUser(HttpUser):
 
 class ProductionDayShape(LoadTestShape):
     """
-    Load shape: short-cycled but realistic.
+    30-minute load shape: phased, realistic.
     Returns (user_count, spawn_rate) or None to stop.
     """
 
     def __init__(self):
         super().__init__()
         self.phases = [
-            (300, 2000, 100),    # 0-5min ramp to 500
-            (600, 5000, 200),    # 5-10min hold
-            (900, 8000, 300),    # 10-15min ramp to 800
-            (1200, 8000, 300),   # 15-20min hold
-            (1500, 16000, 500), # 20-25min ramp to 2000 (spike)
-            (1800, 16000, 500),  # 25-30min peak
-            (2100, 5000, 300),  # 30-35min drop to 100
-            (3600, 2000, 100),   # 35-60min night steady
+            (180,  1000,  400),    # 0-3min:   ramp to 900 users
+            (480,  1000,  400),    # 3-8min:   hold at 900
+            (660,  2000,  500),    # 8-11min:  ramp to 1500 users
+            (960,  2000,  500),    # 11-16min: hold at 1500
+            (1140, 4000, 800),    # 16-19min: spike to 2500 users
+            (1440, 4000, 800),    # 19-24min: sustain peak 2500
+            (1620, 500,  300),    # 24-27min: drop to 500 users
+            (1800, 500,  100),    # 27-30min: hold at 500 (steady)
         ]
 
     def tick(self):

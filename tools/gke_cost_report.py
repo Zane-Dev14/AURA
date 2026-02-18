@@ -38,17 +38,20 @@ import requests
 # ============================================================
 
 PROM_BASES = [
-    "http://127.0.0.1:9090",
-    "http://localhost:9090",
-    "http://[::1]:9090"
+    "http://127.0.0.1:9090",    # IPv4 (port-forward default)
+    "http://localhost:9090",     # Hostname fallback
 ]
 
 SERVICES = ["api", "app", "db"]
 NAMESPACE = "default"
 
 # Test duration and collection settings
-TEST_DURATION_MINUTES = 60
-QUERY_RANGE_STEP = "15s"  # 15-second intervals → ~240 points per metric
+TEST_DURATION_MINUTES = 30
+QUERY_RANGE_STEP = "15s"  # 15-second intervals for time-series
+
+# Retry settings for Prometheus queries
+PROM_MAX_RETRIES = 3
+PROM_RETRY_DELAY = 2  # seconds between retries
 
 # Output directory
 OUTPUT_DIR = Path("docs/Final Results")
@@ -63,7 +66,7 @@ QUERIES_LOG = []
 
 def prom_query(query: str, base_url: Optional[str] = None) -> Any:
     """
-    Execute instant Prometheus query.
+    Execute instant Prometheus query with retry logic.
     Returns the first result value, or None if empty/error.
     Logs all queries for reproducibility.
     """
@@ -72,82 +75,100 @@ def prom_query(query: str, base_url: Optional[str] = None) -> Any:
     bases = [base_url] if base_url else PROM_BASES
     last_err = None
     
-    for base in bases:
-        try:
-            r = requests.get(
-                f"{base}/api/v1/query",
-                params={"query": query},
-                timeout=30
-            )
-            r.raise_for_status()
-            data = r.json()
-            
-            if data.get("status") != "success":
-                last_err = f"Prometheus error: {data.get('error', 'unknown')}"
+    for attempt in range(PROM_MAX_RETRIES):
+        if attempt > 0:
+            time.sleep(PROM_RETRY_DELAY)
+        
+        for base in bases:
+            try:
+                r = requests.get(
+                    f"{base}/api/v1/query",
+                    params={"query": query},
+                    timeout=30
+                )
+                r.raise_for_status()
+                data = r.json()
+                
+                if data.get("status") != "success":
+                    last_err = f"Prometheus error: {data.get('error', 'unknown')}"
+                    continue
+                
+                results = data.get("data", {}).get("result", [])
+                if not results:
+                    return None
+                
+                # Extract first result value
+                value = results[0].get("value", [None, None])[1]
+                if value is None:
+                    return None
+                
+                v = float(value)
+                if math.isnan(v) or math.isinf(v):
+                    return None
+                return v
+                
+            except requests.exceptions.ConnectionError as e:
+                last_err = f"Connection error (attempt {attempt+1}/{PROM_MAX_RETRIES}): {e}"
+                break  # break inner loop to trigger retry
+            except Exception as e:
+                last_err = str(e)
                 continue
-            
-            results = data.get("data", {}).get("result", [])
-            if not results:
-                return None
-            
-            # Extract first result value
-            value = results[0].get("value", [None, None])[1]
-            if value is None:
-                return None
-            
-            v = float(value)
-            if math.isnan(v) or math.isinf(v):
-                return None
-            return v
-            
-        except Exception as e:
-            last_err = str(e)
-            continue
     
-    print(f"WARNING: Query failed: {query[:80]}... Error: {last_err}")
+    print(f"WARNING: Query failed after {PROM_MAX_RETRIES} attempts: {query[:80]}... Error: {last_err}")
     return None
 
 
 def prom_query_range(query: str, start: str, end: str, step: str = QUERY_RANGE_STEP) -> list:
     """
-    Execute range Prometheus query.
+    Execute range Prometheus query with retry logic.
     Returns list of (timestamp, value) tuples.
     Logs all queries for reproducibility.
     """
     QUERIES_LOG.append({"type": "range", "query": query, "start": start, "end": end, "step": step})
     
-    for base in PROM_BASES:
-        try:
-            r = requests.get(
-                f"{base}/api/v1/query_range",
-                params={"query": query, "start": start, "end": end, "step": step},
-                timeout=60
-            )
-            r.raise_for_status()
-            data = r.json()
-            
-            if data.get("status") != "success":
+    last_err = None
+    for attempt in range(PROM_MAX_RETRIES):
+        if attempt > 0:
+            time.sleep(PROM_RETRY_DELAY)
+        
+        for base in PROM_BASES:
+            try:
+                r = requests.get(
+                    f"{base}/api/v1/query_range",
+                    params={"query": query, "start": start, "end": end, "step": step},
+                    timeout=60
+                )
+                r.raise_for_status()
+                data = r.json()
+                
+                if data.get("status") != "success":
+                    last_err = f"Prometheus error: {data.get('error', 'unknown')}"
+                    continue
+                
+                results = data.get("data", {}).get("result", [])
+                if not results:
+                    return []
+                
+                # Extract values from first result
+                values = results[0].get("values", [])
+                parsed = []
+                for ts, val in values:
+                    try:
+                        v = float(val)
+                        if not (math.isnan(v) or math.isinf(v)):
+                            parsed.append((ts, v))
+                    except (ValueError, TypeError):
+                        pass
+                return parsed
+                
+            except requests.exceptions.ConnectionError as e:
+                last_err = f"Connection error (attempt {attempt+1}/{PROM_MAX_RETRIES}): {e}"
+                break  # break inner loop to trigger retry
+            except Exception as e:
+                last_err = str(e)
                 continue
-            
-            results = data.get("data", {}).get("result", [])
-            if not results:
-                return []
-            
-            # Extract values from first result
-            values = results[0].get("values", [])
-            parsed = []
-            for ts, val in values:
-                try:
-                    v = float(val)
-                    if not (math.isnan(v) or math.isinf(v)):
-                        parsed.append((ts, v))
-                except (ValueError, TypeError):
-                    pass
-            return parsed
-            
-        except Exception:
-            continue
     
+    print(f"WARNING: Range query failed after {PROM_MAX_RETRIES} attempts: {query[:80]}...")
     return []
 
 
@@ -155,8 +176,8 @@ def get_time_range(duration_minutes: int = TEST_DURATION_MINUTES) -> tuple:
     """Get time window ending now."""
     now = int(time.time())
     start = now - (duration_minutes * 60)
-    start_str = datetime.datetime.utcfromtimestamp(start).strftime('%Y-%m-%dT%H:%M:%SZ')
-    end_str = datetime.datetime.utcfromtimestamp(now).strftime('%Y-%m-%dT%H:%M:%SZ')
+    start_str = datetime.datetime.fromtimestamp(start, tz=datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    end_str = datetime.datetime.fromtimestamp(now, tz=datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     return start_str, end_str, start, now
 
 
@@ -577,7 +598,7 @@ def export_timeseries_csv(timeseries: dict, mode: str, output_dir: Path):
                 all_ts.add(ts)
         
         for ts in sorted(all_ts):
-            row = [datetime.datetime.utcfromtimestamp(ts).isoformat()]
+            row = [datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).isoformat()]
             for service in SERVICES:
                 replicas = timeseries.get(service, {}).get("replicas", [])
                 val = next((v for t, v in replicas if t == ts), "")
@@ -598,7 +619,7 @@ def export_timeseries_csv(timeseries: dict, mode: str, output_dir: Path):
                 all_ts.add(ts)
         
         for ts in sorted(all_ts):
-            row = [datetime.datetime.utcfromtimestamp(ts).isoformat()]
+            row = [datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).isoformat()]
             for service in ["api", "app"]:
                 p99_ts = timeseries.get(service, {}).get("p99_ms", [])
                 val = next((round(v, 2) for t, v in p99_ts if t == ts), "")
@@ -619,7 +640,7 @@ def export_timeseries_csv(timeseries: dict, mode: str, output_dir: Path):
                 all_ts.add(ts)
         
         for ts in sorted(all_ts):
-            row = [datetime.datetime.utcfromtimestamp(ts).isoformat()]
+            row = [datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).isoformat()]
             for service in SERVICES:
                 cpu_ts = timeseries.get(service, {}).get("cpu_cores", [])
                 val = next((round(v, 4) for t, v in cpu_ts if t == ts), "")
@@ -641,7 +662,7 @@ def collect_all_metrics(mode: str) -> dict:
     print(f"AURA Metrics Collection — Mode: {mode.upper()}")
     print(f"{'='*60}")
     
-    timestamp = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     start_str, end_str, start_ts, end_ts = get_time_range(TEST_DURATION_MINUTES)
     
     print(f"\nCollection window: {start_str} to {end_str}")
@@ -745,8 +766,8 @@ def main():
     parser.add_argument(
         "--duration",
         type=int,
-        default=60,
-        help="Test duration in minutes (default: 60)"
+        default=30,
+        help="Test duration in minutes (default: 30)"
     )
     parser.add_argument(
         "--output-dir",
@@ -771,7 +792,7 @@ def main():
     result, timeseries = collect_all_metrics(args.mode)
     
     # Generate timestamp for filenames
-    file_ts = datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    file_ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')
     
     # Save JSON
     json_file = output_dir / f"{args.mode}_metrics_{file_ts}.json"

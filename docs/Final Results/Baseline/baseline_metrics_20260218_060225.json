@@ -1,80 +1,80 @@
 {
-  "timestamp": "2026-02-11T17:32:01Z",
+  "timestamp": "2026-02-18T06:02:25Z",
   "mode": "baseline",
-  "test_duration_minutes": 5,
+  "test_duration_minutes": 30,
   "collection_window": {
-    "start": "2026-02-11T17:27:01Z",
-    "end": "2026-02-11T17:32:01Z"
+    "start": "2026-02-18T05:32:25Z",
+    "end": "2026-02-18T06:02:25Z"
   },
   "cluster_hardware": {
     "node_count": 2,
-    "cpu_per_node_cores": 2.0,
-    "memory_per_node_gb": 5.79,
-    "allocatable_cpu_total_cores": 4.0,
-    "allocatable_memory_total_gb": 11.57
+    "cpu_per_node_cores": 4.0,
+    "memory_per_node_gb": 7.75,
+    "allocatable_cpu_total_cores": 8.0,
+    "allocatable_memory_total_gb": 15.5
   },
   "resource_requests": {
-    "total_cpu_requested_cores": 2.2,
-    "total_memory_requested_gb": 2.25,
+    "total_cpu_requested_cores": 0.6,
+    "total_memory_requested_gb": 1.25,
     "per_service": {
       "api": {
         "replicas": 1,
-        "cpu_request_per_pod_cores": 0.55,
-        "memory_request_per_pod_gb": 0.562,
-        "total_cpu_requested_cores": 0.55,
-        "total_memory_requested_gb": 0.562
+        "cpu_request_per_pod_cores": 0.15,
+        "memory_request_per_pod_gb": 0.312,
+        "total_cpu_requested_cores": 0.15,
+        "total_memory_requested_gb": 0.312
       },
       "app": {
         "replicas": 1,
-        "cpu_request_per_pod_cores": 0.6,
-        "memory_request_per_pod_gb": 0.625,
-        "total_cpu_requested_cores": 0.6,
-        "total_memory_requested_gb": 0.625
+        "cpu_request_per_pod_cores": 0.2,
+        "memory_request_per_pod_gb": 0.375,
+        "total_cpu_requested_cores": 0.2,
+        "total_memory_requested_gb": 0.375
       },
       "db": {
         "replicas": 1,
-        "cpu_request_per_pod_cores": 1.05,
-        "memory_request_per_pod_gb": 1.062,
-        "total_cpu_requested_cores": 1.05,
-        "total_memory_requested_gb": 1.062
+        "cpu_request_per_pod_cores": 0.25,
+        "memory_request_per_pod_gb": 0.562,
+        "total_cpu_requested_cores": 0.25,
+        "total_memory_requested_gb": 0.562
       }
     }
   },
   "cluster": {
-    "total_cpu_used_cores": 0.433,
-    "total_cpu_requested_cores": 2.2,
-    "total_memory_used_gb": 0.8771,
-    "total_memory_requested_gb": 2.25,
-    "total_rps": 387.14
+    "total_cpu_used_cores": 0.495,
+    "total_cpu_requested_cores": 0.6,
+    "total_memory_used_gb": 1.2581,
+    "total_memory_requested_gb": 1.25,
+    "total_rps": 448.34
   },
   "services": {
     "api": {
-      "cpu_used_cores": 0.15673990910802152,
-      "memory_used_gb": 0.1897,
+      "cpu_used_cores": 0.17433317866386225,
+      "memory_used_gb": 0.2325,
       "replicas": 1.0,
-      "rps": 193.54285714285712,
+      "rps": 206.70476190476188,
       "error_rate": 0.0,
-      "p50_ms": 0.41,
-      "p95_ms": 4.55,
-      "p99_ms": 4.97,
+      "p50_ms": 0.35,
+      "p95_ms": 13.63,
+      "p99_ms": 43.13,
       "avg_replicas": 1.0,
-      "replica_hours": 0.0833
+      "replica_hours": 0.5
     },
     "app": {
-      "cpu_used_cores": 0.10511729682917705,
-      "memory_used_gb": 0.1254,
+      "cpu_used_cores": 0.14820711888442434,
+      "memory_used_gb": 0.1523,
       "replicas": 1.0,
-      "rps": 193.6,
+      "rps": 241.63809523809522,
       "error_rate": 0.0,
-      "p50_ms": 2.72,
-      "p95_ms": 4.89,
-      "p99_ms": 8.5,
+      "p50_ms": 2.95,
+      "p95_ms": 18.91,
+      "p99_ms": 48.59,
       "avg_replicas": 1.0,
-      "replica_hours": 0.0833
+      "replica_hours": 0.5
     },
     "db": {
-      "cpu_used_cores": 0.00782024063633666,
-      "memory_used_gb": 0.4355,
+      "cpu_used_cores": 0.0066977336205386265,
+      "memory_used_gb": 0.5165,
       "replicas": 1.0,
       "rps": null,
       "rps_note": "DB is TCP proxy - no HTTP RPS",
@@ -84,21 +84,21 @@
       "p99_ms": null,
       "latency_note": "TCP proxy \u2014 HTTP histograms unavailable",
       "avg_replicas": 1.0,
-      "replica_hours": 0.0833
+      "replica_hours": 0.5
     }
   },
   "replica_hours": {
     "api": {
       "avg_replicas": 1.0,
-      "replica_hours": 0.0833
+      "replica_hours": 0.5
     },
     "app": {
       "avg_replicas": 1.0,
-      "replica_hours": 0.0833
+      "replica_hours": 0.5
     },
     "db": {
       "avg_replicas": 1.0,
-      "replica_hours": 0.0833
+      "replica_hours": 0.5
     }
   },
   "sla_violations": {},
@@ -202,78 +202,78 @@
     {
       "type": "range",
       "query": "kube_deployment_status_replicas{deployment=\"api\"}",
-      "start": "2026-02-11T17:27:01Z",
-      "end": "2026-02-11T17:32:01Z",
+      "start": "2026-02-18T05:32:25Z",
+      "end": "2026-02-18T06:02:25Z",
       "step": "15s"
     },
     {
       "type": "range",
       "query": "\n            sum(rate(container_cpu_usage_seconds_total{\n                namespace=\"default\",\n                pod=~\"api-.*\",\n                container=\"api\",\n                container!=\"POD\"\n            }[2m]))\n        ",
-      "start": "2026-02-11T17:27:01Z",
-      "end": "2026-02-11T17:32:01Z",
+      "start": "2026-02-18T05:32:25Z",
+      "end": "2026-02-18T06:02:25Z",
       "step": "15s"
     },
     {
       "type": "range",
       "query": "\n            sum(container_memory_working_set_bytes{\n                namespace=\"default\",\n                pod=~\"api-.*\",\n                container=\"api\"\n            }) / 1024 / 1024 / 1024\n        ",
-      "start": "2026-02-11T17:27:01Z",
-      "end": "2026-02-11T17:32:01Z",
+      "start": "2026-02-18T05:32:25Z",
+      "end": "2026-02-18T06:02:25Z",
       "step": "15s"
     },
     {
       "type": "range",
       "query": "\n                histogram_quantile(\n                    0.99,\n                    sum by (le)(\n                        rate(envoy_http_downstream_rq_time_bucket{\n                            namespace=\"default\",\n                            job=\"api\",\n                            envoy_http_conn_manager_prefix=\"ingress\"\n                        }[2m])\n                    )\n                )\n            ",
-      "start": "2026-02-11T17:27:01Z",
-      "end": "2026-02-11T17:32:01Z",
+      "start": "2026-02-18T05:32:25Z",
+      "end": "2026-02-18T06:02:25Z",
       "step": "15s"
     },
     {
       "type": "range",
       "query": "kube_deployment_status_replicas{deployment=\"app\"}",
-      "start": "2026-02-11T17:27:01Z",
-      "end": "2026-02-11T17:32:01Z",
+      "start": "2026-02-18T05:32:25Z",
+      "end": "2026-02-18T06:02:25Z",
       "step": "15s"
     },
     {
       "type": "range",
       "query": "\n            sum(rate(container_cpu_usage_seconds_total{\n                namespace=\"default\",\n                pod=~\"app-.*\",\n                container=\"app\",\n                container!=\"POD\"\n            }[2m]))\n        ",
-      "start": "2026-02-11T17:27:01Z",
-      "end": "2026-02-11T17:32:01Z",
+      "start": "2026-02-18T05:32:25Z",
+      "end": "2026-02-18T06:02:25Z",
       "step": "15s"
     },
     {
       "type": "range",
       "query": "\n            sum(container_memory_working_set_bytes{\n                namespace=\"default\",\n                pod=~\"app-.*\",\n                container=\"app\"\n            }) / 1024 / 1024 / 1024\n        ",
-      "start": "2026-02-11T17:27:01Z",
-      "end": "2026-02-11T17:32:01Z",
+      "start": "2026-02-18T05:32:25Z",
+      "end": "2026-02-18T06:02:25Z",
       "step": "15s"
     },
     {
       "type": "range",
       "query": "\n                histogram_quantile(\n                    0.99,\n                    sum by (le)(\n                        rate(envoy_http_downstream_rq_time_bucket{\n                            namespace=\"default\",\n                            job=\"app\",\n                            envoy_http_conn_manager_prefix=\"ingress\"\n                        }[2m])\n                    )\n                )\n            ",
-      "start": "2026-02-11T17:27:01Z",
-      "end": "2026-02-11T17:32:01Z",
+      "start": "2026-02-18T05:32:25Z",
+      "end": "2026-02-18T06:02:25Z",
       "step": "15s"
     },
     {
       "type": "range",
       "query": "kube_deployment_status_replicas{deployment=\"db\"}",
-      "start": "2026-02-11T17:27:01Z",
-      "end": "2026-02-11T17:32:01Z",
+      "start": "2026-02-18T05:32:25Z",
+      "end": "2026-02-18T06:02:25Z",
       "step": "15s"
     },
     {
       "type": "range",
       "query": "\n            sum(rate(container_cpu_usage_seconds_total{\n                namespace=\"default\",\n                pod=~\"db-.*\",\n                container=\"db\",\n                container!=\"POD\"\n            }[2m]))\n        ",
-      "start": "2026-02-11T17:27:01Z",
-      "end": "2026-02-11T17:32:01Z",
+      "start": "2026-02-18T05:32:25Z",
+      "end": "2026-02-18T06:02:25Z",
       "step": "15s"
     },
     {
       "type": "range",
       "query": "\n            sum(container_memory_working_set_bytes{\n                namespace=\"default\",\n                pod=~\"db-.*\",\n                container=\"db\"\n            }) / 1024 / 1024 / 1024\n        ",
-      "start": "2026-02-11T17:27:01Z",
-      "end": "2026-02-11T17:32:01Z",
+      "start": "2026-02-18T05:32:25Z",
+      "end": "2026-02-18T06:02:25Z",
       "step": "15s"
     }
   ]
