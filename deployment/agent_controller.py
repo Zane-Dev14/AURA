@@ -30,8 +30,8 @@ NAMESPACE = "default"
 SERVICES = ["api", "app", "db"]
 
 MIN_REPLICAS = {
-    "api": 2,
-    "app": 3,
+    "api": 1,
+    "app": 1,
     "db": 1
 }
 
@@ -131,6 +131,19 @@ def main():
                     if rps_gain <= 0 and m["rps"] > 100:
                         print(f"⚠️ ELASTICITY VETO: {svc} scaling futile (Δrps={rps_gain:.1f})")
                         actions[svc] = 0
+            
+            # Veto 1b: Aggressive scale-down override (for overtrained agents)
+            # If agent wants to scale up/maintain but conditions are excellent, force scale-down
+            if actions[svc] >= 0:  # Agent wants to maintain or scale up
+                current_replicas = int(m["desired"])
+                current_p99 = m["p99"]
+                current_rps = m.get("rps", 0) or 0
+                current_cpu = m.get("cpu", 0)
+                
+                # Force scale-down if: excellent latency + low load + high replicas
+                if (current_p99 < 50 and current_cpu < 0.6 and current_replicas > 2):
+                    print(f"🔧 OVERRIDE: {svc} forcing scale-down (p99={current_p99:.0f}ms, cpu={current_cpu*100:.0f}%, replicas={current_replicas} > 2)")
+                    actions[svc] = -1
 
             # Veto 2: Tier-coupled (don't scale APP if API is bottleneck)
             if svc == "app" and actions[svc] > 0:
@@ -141,25 +154,45 @@ def main():
                         print(f"⚠️ TIER VETO: API bottleneck (q={api_queue:.0f}), blocking APP scale-up")
                         actions[svc] = 0
 
-            # Veto 3: Smoothed p99 SLO (scale-down only if below SLO)
+            # Veto 3: Multi-tier SLO check with escape hatches (intelligent scale-down)
             if actions[svc] < 0:
-                # Smoothed p99: avg_over_time(histogram_quantile(0.99, ...)[P99_WINDOW])
-                try:
-                    prom_query = f"avg_over_time(histogram_quantile(0.99, sum by (le) (increase(envoy_http_downstream_rq_time_bucket{{namespace=\"{NAMESPACE}\",job=\"{svc}\",envoy_http_conn_manager_prefix=\"ingress\"}}[2m])))[{P99_WINDOW}])"
-                    smoothed_p99 = requests.get(
-                        f"{PROMETHEUS_URL}/api/v1/query",
-                        params={"query": prom_query},
-                        timeout=5
-                    ).json()
-                    if smoothed_p99["data"]["result"]:
-                        p99_val = float(smoothed_p99["data"]["result"][0]["value"][1])
+                current_p99 = m["p99"]
+                current_rps = m.get("rps", 0) or 0
+                
+                # Tier A - ESCAPE HATCH 1: No traffic (allow scale-down immediately)
+                if current_rps < 50:
+                    print(f"✓ SCALE-DOWN ALLOWED: {svc} - Low traffic (rps={current_rps:.0f} < 50)")
+                
+                # Tier B - ESCAPE HATCH 2: Current state excellent (allow scale-down)
+                elif current_p99 < 100:
+                    print(f"✓ SCALE-DOWN ALLOWED: {svc} - Excellent latency (p99={current_p99:.0f}ms < 100ms)")
+                
+                # Tier C - MARGINAL ZONE: Allow with warning (100 ≤ p99 < 500)
+                elif current_p99 < 500:
+                    print(f"⚠️  SCALE-DOWN MARGINAL: {svc} - Acceptable latency (p99={current_p99:.0f}ms in [100,500)ms)")
+                
+                # Tier D - SLO BREACH ZONE: Check smoothed metrics before blocking
+                else:  # current_p99 >= 500
+                    try:
+                        prom_query = f"avg_over_time(histogram_quantile(0.99, sum by (le) (increase(envoy_http_downstream_rq_time_bucket{{namespace=\"{NAMESPACE}\",job=\"{svc}\",envoy_http_conn_manager_prefix=\"ingress\"}}[2m])))[{P99_WINDOW}])"
+                        smoothed_p99 = requests.get(
+                            f"{PROMETHEUS_URL}/api/v1/query",
+                            params={"query": prom_query},
+                            timeout=5
+                        ).json()
+                        if smoothed_p99["data"]["result"]:
+                            smoothed_p99_val = float(smoothed_p99["data"]["result"][0]["value"][1])
+                        else:
+                            smoothed_p99_val = current_p99
+                    except Exception:
+                        smoothed_p99_val = current_p99
+                    
+                    # Only block if smoothed average confirms sustained violation
+                    if smoothed_p99_val > P99_SLO:
+                        print(f"🚫 SLO VETO: {svc} - Sustained violation (smoothed={smoothed_p99_val:.0f}ms, current={current_p99:.0f}ms, SLO={P99_SLO}ms)")
+                        actions[svc] = 0
                     else:
-                        p99_val = m["p99"]
-                except Exception:
-                    p99_val = m["p99"]
-                if p99_val > P99_SLO:
-                    print(f"⚠️ SLO VETO: {svc} smoothed p99={p99_val:.0f}ms > SLO={P99_SLO}ms, blocking scale-down")
-                    actions[svc] = 0
+                        print(f"✓ SCALE-DOWN ALLOWED: {svc} - Escape Hatch 3 (spike recovered: smoothed={smoothed_p99_val:.0f}ms ≤ SLO, current={current_p99:.0f}ms)")
 
         # ==============================
         # Apply actions

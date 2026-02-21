@@ -1,0 +1,326 @@
+ bash tools/run_hpa_test.sh
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  AURA HPA Test — 30-minute automated run
+  (Same workload as baseline/QMIX, using K8s HPA)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[INFO] Verifying cluster connectivity...
+[OK] Cluster connected
+[HPA] Checking metrics-server availability...
+[OK] metrics-server is available
+[INFO] Rebuilding Locust Docker image (same workload)...
+#9 naming to docker.io/library/project-locust:local done
+#9 unpacking to docker.io/library/project-locust:local done
+#9 DONE 0.0s
+[OK] Image rebuilt
+[INFO] Importing image into k3d cluster...
+INFO[0003] Successfully imported image(s)               
+INFO[0003] Successfully imported 1 image(s) into 1 cluster(s) 
+[OK] Image imported
+[INFO] Restarting Locust deployment...
+deployment.apps/locust restarted
+Waiting for deployment "locust" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "locust" rollout to finish: 1 old replicas are pending termination...
+deployment "locust" successfully rolled out
+[OK] Locust redeployed
+[INFO] Ensuring service labels for Prometheus scraping...
+service/api not labeled
+service/app not labeled
+service/db not labeled
+[OK] Service labels verified
+[HPA] Setting initial replicas to 1 for all services...
+deployment.apps/api scaled
+deployment.apps/app scaled
+deployment.apps/db scaled
+[INFO] Waiting for replicas to be ready...
+deployment "api" successfully rolled out
+deployment "app" successfully rolled out
+deployment "db" successfully rolled out
+[OK] All services scaled to 1 replica
+[HPA] Deploying production-grade HPA manifests...
+horizontalpodautoscaler.autoscaling/api-hpa created
+horizontalpodautoscaler.autoscaling/app-hpa created
+horizontalpodautoscaler.autoscaling/db-hpa created
+[OK] HPA resources deployed
+[INFO] Verifying HPA status...
+NAME      REFERENCE        TARGETS                                     MINPODS   MAXPODS   REPLICAS   AGE
+api-hpa   Deployment/api   cpu: <unknown>/70%, memory: <unknown>/80%   1         5         0          6s
+app-hpa   Deployment/app   cpu: <unknown>/75%, memory: <unknown>/80%   1         5         0          6s
+db-hpa    Deployment/db    cpu: <unknown>/80%, memory: <unknown>/85%   1         3         0          6s
+[OK] HPAs active and monitoring
+[INFO] Starting port-forwards...
+[OK] Prometheus port-forward active (PID: 3991)
+[OK] Locust port-forward active (PID: 3997)
+[INFO] Starting 30-minute HPA load test...
+  Host: http://app:8080
+  Shape: ProductionDayShape (30 min phased)
+  Autoscaler: Kubernetes HPA (CPU+Memory based)
+  Start: Sat Feb 21 10:51:45 IST 2026
+[OK] Test started
+[INFO] Monitoring test progress (30 minutes)...
+  Live dashboard: http://localhost:8089/
+  HPA status:     kubectl get hpa -n default
+  ⏱  4 / 30 min | RPS: 601    | Fails: 9007  | Replicas: api=5 app=4 db=1 | CPU: API:78% APP:64% DB:6%[INFO] ━━━ Collecting metrics: 05min_ramp (T+5min) ━━━
+
+============================================================
+AURA Metrics Collection — Mode: HPA
+============================================================
+
+Collection window: 2026-02-21T04:56:46Z to 2026-02-21T05:26:46Z
+Duration: 30 minutes
+
+[1/6] Collecting cluster hardware metadata...
+  Nodes: 2
+  Total allocatable CPU: 8.0 cores
+  Total allocatable memory: 15.5 GB
+
+[2/6] Collecting resource requests (for cost estimation)...
+  Total CPU requested: 1.8 cores
+  Total memory requested: 3.625 GB
+
+[3/6] Collecting per-service Prometheus metrics...
+  Querying api...
+  Querying app...
+  Querying db...
+
+[4/6] Collecting cluster-wide usage...
+  Total CPU used: 1.3954 cores
+  Total memory used: 2.1404 GB
+  Total RPS: 1218.07
+
+[5/6] Checking SLA violations (p99 > 2000ms)...
+  No SLA violations detected
+
+[6/6] Collecting time series for graphs...
+  api: avg 2.35 replicas, 1.1736 replica-hours
+  app: avg 1.38 replicas, 0.6901 replica-hours
+  db: avg 1.0 replicas, 0.5 replica-hours
+
+[OUTPUT] Metrics saved to: docs/Final Results/hpa_metrics_20260221_052646.json
+
+[OUTPUT] Exporting time series CSVs...
+  Exported: docs/Final Results/replicas_over_time_hpa.csv
+  Exported: docs/Final Results/p99_over_time_hpa.csv
+  Exported: docs/Final Results/cpu_usage_over_time_hpa.csv
+
+============================================================
+COLLECTION COMPLETE
+============================================================
+Mode: hpa
+Duration: 30 minutes
+Total queries executed: 35
+Output directory: docs/Final Results
+
+[VALIDATION]
+  All critical metrics collected successfully
+[OK] Metrics collected: 05min_ramp
+  ⏱ 14 / 30 min | RPS: 1213   | Fails: 9682  | Replicas: api=5 app=5 db=1 | CPU: API:158% APP:107% DB:9%[INFO] ━━━ Collecting metrics: 15min_spike (T+15min) ━━━
+
+============================================================
+AURA Metrics Collection — Mode: HPA
+============================================================
+
+Collection window: 2026-02-21T05:06:46Z to 2026-02-21T05:36:46Z
+Duration: 30 minutes
+
+[1/6] Collecting cluster hardware metadata...
+  Nodes: 2
+  Total allocatable CPU: 8.0 cores
+  Total allocatable memory: 15.5 GB
+
+[2/6] Collecting resource requests (for cost estimation)...
+  Total CPU requested: 2.0 cores
+  Total memory requested: 4.0 GB
+
+[3/6] Collecting per-service Prometheus metrics...
+  Querying api...
+  Querying app...
+  Querying db...
+
+[4/6] Collecting cluster-wide usage...
+  Total CPU used: 2.6977 cores
+  Total memory used: 2.4065 GB
+  Total RPS: 2375.33
+
+[5/6] Checking SLA violations (p99 > 2000ms)...
+  No SLA violations detected
+
+[6/6] Collecting time series for graphs...
+  api: avg 3.34 replicas, 1.6694 replica-hours
+  app: avg 2.59 replicas, 1.2934 replica-hours
+  db: avg 1.0 replicas, 0.5 replica-hours
+
+[OUTPUT] Metrics saved to: docs/Final Results/hpa_metrics_20260221_053646.json
+
+[OUTPUT] Exporting time series CSVs...
+  Exported: docs/Final Results/replicas_over_time_hpa.csv
+  Exported: docs/Final Results/p99_over_time_hpa.csv
+  Exported: docs/Final Results/cpu_usage_over_time_hpa.csv
+
+============================================================
+COLLECTION COMPLETE
+============================================================
+Mode: hpa
+Duration: 30 minutes
+Total queries executed: 35
+Output directory: docs/Final Results
+
+[VALIDATION]
+  All critical metrics collected successfully
+[OK] Metrics collected: 15min_spike
+  ⏱ 24 / 30 min | RPS: 304    | Fails: 26599 | Replicas: api=5 app=5 db=1 | CPU: API:79% APP:59% DB:6%[INFO] ━━━ Collecting metrics: 25min_peak (T+25min) ━━━
+
+============================================================
+AURA Metrics Collection — Mode: HPA
+============================================================
+
+Collection window: 2026-02-21T05:16:46Z to 2026-02-21T05:46:46Z
+Duration: 30 minutes
+
+[1/6] Collecting cluster hardware metadata...
+  Nodes: 2
+  Total allocatable CPU: 8.0 cores
+  Total allocatable memory: 15.5 GB
+
+[2/6] Collecting resource requests (for cost estimation)...
+  Total CPU requested: 2.0 cores
+  Total memory requested: 4.0 GB
+
+[3/6] Collecting per-service Prometheus metrics...
+  Querying api...
+  Querying app...
+  Querying db...
+
+[4/6] Collecting cluster-wide usage...
+  Total CPU used: 1.919 cores
+  Total memory used: 2.5636 GB
+  Total RPS: 1458.84
+
+[5/6] Checking SLA violations (p99 > 2000ms)...
+  No SLA violations detected
+
+[6/6] Collecting time series for graphs...
+  api: avg 4.33 replicas, 2.1653 replica-hours
+  app: avg 3.91 replicas, 1.9545 replica-hours
+  db: avg 1.0 replicas, 0.5 replica-hours
+
+[OUTPUT] Metrics saved to: docs/Final Results/hpa_metrics_20260221_054646.json
+
+[OUTPUT] Exporting time series CSVs...
+  Exported: docs/Final Results/replicas_over_time_hpa.csv
+  Exported: docs/Final Results/p99_over_time_hpa.csv
+  Exported: docs/Final Results/cpu_usage_over_time_hpa.csv
+
+============================================================
+COLLECTION COMPLETE
+============================================================
+Mode: hpa
+Duration: 30 minutes
+Total queries executed: 35
+Output directory: docs/Final Results
+
+[VALIDATION]
+  All critical metrics collected successfully
+[OK] Metrics collected: 25min_peak
+  ⏱ 30 / 30 min | RPS: 309    | Fails: 26599 | Replicas: api=5 app=3 db=1 | CPU: API:7% APP:7% DB:3%4%
+[OK] Test completed after 30 minutes
+[INFO] Running final metrics collection...
+[INFO] ━━━ Collecting metrics: final (T+30min) ━━━
+
+============================================================
+AURA Metrics Collection — Mode: HPA
+============================================================
+
+Collection window: 2026-02-21T05:22:24Z to 2026-02-21T05:52:24Z
+Duration: 30 minutes
+
+[1/6] Collecting cluster hardware metadata...
+  Nodes: 2
+  Total allocatable CPU: 8.0 cores
+  Total allocatable memory: 15.5 GB
+
+[2/6] Collecting resource requests (for cost estimation)...
+  Total CPU requested: 1.6 cores
+  Total memory requested: 3.25 GB
+
+[3/6] Collecting per-service Prometheus metrics...
+  Querying api...
+  Querying app...
+  Querying db...
+
+[4/6] Collecting cluster-wide usage...
+  Total CPU used: 0.6263 cores
+  Total memory used: 2.3558 GB
+  Total RPS: 443.94
+
+[5/6] Checking SLA violations (p99 > 2000ms)...
+  No SLA violations detected
+
+[6/6] Collecting time series for graphs...
+  api: avg 4.92 replicas, 2.4587 replica-hours
+  app: avg 4.62 replicas, 2.3099 replica-hours
+  db: avg 1.0 replicas, 0.5 replica-hours
+
+[OUTPUT] Metrics saved to: docs/Final Results/hpa_metrics_20260221_055224.json
+
+[OUTPUT] Exporting time series CSVs...
+  Exported: docs/Final Results/replicas_over_time_hpa.csv
+  Exported: docs/Final Results/p99_over_time_hpa.csv
+  Exported: docs/Final Results/cpu_usage_over_time_hpa.csv
+
+============================================================
+COLLECTION COMPLETE
+============================================================
+Mode: hpa
+Duration: 30 minutes
+Total queries executed: 35
+Output directory: docs/Final Results
+
+[VALIDATION]
+  All critical metrics collected successfully
+[OK] Metrics collected: final
+[INFO] Stopping Locust test...
+[INFO] Waiting for background collectors to finish...
+[HPA] Capturing final HPA state...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  HPA TEST COMPLETE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Start:    Sat Feb 21 10:51:45 IST 2026
+  End:      Sat Feb 21 11:22:24 IST 2026
+  Duration: 30 minutes
+
+Final replica counts:
+  api: 5  |  app: 3  |  db: 1
+
+Final HPA metrics:
+NAME      REFERENCE        TARGETS                        MINPODS   MAXPODS   REPLICAS   AGE
+api-hpa   Deployment/api   cpu: 7%/70%, memory: 68%/80%   1         5         5          30m
+app-hpa   Deployment/app   cpu: 7%/75%, memory: 43%/80%   1         5         4          30m
+db-hpa    Deployment/db    cpu: 3%/80%, memory: 87%/85%   1         3         1          30m
+
+Output files:
+-rw-r--r--@ 1 eric  staff    14K 21 Feb 10:56 /Users/eric/Documents/GitHub/AURA/docs/Final Results/hpa_metrics_20260221_052646.json
+-rw-r--r--@ 1 eric  staff    14K 21 Feb 11:06 /Users/eric/Documents/GitHub/AURA/docs/Final Results/hpa_metrics_20260221_053646.json
+-rw-r--r--@ 1 eric  staff    14K 21 Feb 11:16 /Users/eric/Documents/GitHub/AURA/docs/Final Results/hpa_metrics_20260221_054646.json
+-rw-r--r--@ 1 eric  staff    14K 21 Feb 11:22 /Users/eric/Documents/GitHub/AURA/docs/Final Results/hpa_metrics_20260221_055224.json
+
+CSV time-series:
+  -rw-r--r--@ 1 eric  staff   5.7K 21 Feb 11:22 /Users/eric/Documents/GitHub/AURA/docs/Final Results/cpu_usage_over_time_hpa.csv
+  -rw-r--r--@ 1 eric  staff   4.8K 21 Feb 11:22 /Users/eric/Documents/GitHub/AURA/docs/Final Results/p99_over_time_hpa.csv
+  -rw-r--r--@ 1 eric  staff   4.7K 21 Feb 11:22 /Users/eric/Documents/GitHub/AURA/docs/Final Results/replicas_over_time_hpa.csv
+
+HPA state snapshots:
+-rw-r--r--  1 eric  staff   8.9K 21 Feb 11:22 /Users/eric/Documents/GitHub/AURA/docs/Final Results/HPA/hpa_final_state_20260221_112224.yaml
+
+[OK] All done!
+
+[INFO] Cleaning up...
+[HPA] Removing HPA resources...
+horizontalpodautoscaler.autoscaling "api-hpa" deleted
+horizontalpodautoscaler.autoscaling "app-hpa" deleted
+horizontalpodautoscaler.autoscaling "db-hpa" deleted
+tools/run_hpa_test.sh: line 60:  3991 Terminated: 15          kubectl port-forward -n monitoring svc/kube-prom-kube-prometheus-prometheus 9090:9090 >&/tmp/prom-portforward.log
+tools/run_hpa_test.sh: line 60:  3997 Terminated: 15          kubectl port-forward deployment/locust 8089:8089 >&/tmp/locust-portforward.log
+[OK] Cleanup done
+bash tools/run_hpa_test.sh  42.65s user 25.05s system 3% cpu 31:07.08 total
+

@@ -1,0 +1,42 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: db-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: db
+  minReplicas: 1
+  maxReplicas: 3  # Database scales conservatively (StatefulSet would be better in production)
+  metrics:
+  # CPU-based scaling (primary for DB)
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80  # Higher threshold for DB (expensive to scale)
+  # Memory-based scaling
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 85  # Databases use memory heavily
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60  # DB scaling should be more cautious (60s stabilization)
+      policies:
+      - type: Pods
+        value: 1  # Add 1 DB replica at a time
+        periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 600  # Wait 10 minutes before scaling down DB (very conservative)
+      policies:
+      - type: Pods
+        value: 1  # Remove 1 pod at a time
+        periodSeconds: 120  # Every 2 minutes
+      selectPolicy: Min
