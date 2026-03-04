@@ -33,12 +33,13 @@ SESSION.mount("https://", adapter)
 def index():
     if request.method == "POST":
         try:
+            payload = {
+                "text": request.form.get("quote", ""),
+                "author": request.form.get("author") or None,
+            }
             SESSION.post(
                 f"{API_URL}/api/quotes",
-                json={
-                    "quote": request.form.get("quote", ""),
-                    "author": request.form.get("author", ""),
-                },
+                json=payload,
                 timeout=2.0,
             )
         except Exception:
@@ -57,7 +58,18 @@ def index():
         quotes = resp.json()
     except Exception:
         # fallback to a direct request if the session request fails
-        quotes = requests.get(f"{API_URL}/api/quotes").json()
+        try:
+            resp2 = requests.get(f"{API_URL}/api/quotes", timeout=2.0)
+            # If there's no content or a non-JSON response, default to empty list
+            if resp2.status_code == 204 or not resp2.text or resp2.text.strip() == "":
+                quotes = []
+            else:
+                try:
+                    quotes = resp2.json()
+                except ValueError:
+                    quotes = []
+        except Exception:
+            quotes = []
 
     return render_template("index.html", quotes=quotes)
 

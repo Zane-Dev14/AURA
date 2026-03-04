@@ -1,0 +1,287 @@
+
+bash tools/run_baseline_test.sh  0.92s user 0.73s system 1% cpu 1:58.12 total
+❯ bash tools/run_baseline_test.sh
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  AURA Baseline Test — 30-minute automated run
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[INFO] Verifying cluster connectivity...
+[OK] Cluster connected
+[INFO] Rebuilding Locust Docker image...
+#9 naming to docker.io/library/project-locust:local done
+#9 unpacking to docker.io/library/project-locust:local done
+#9 DONE 0.1s
+[OK] Image rebuilt
+deployment.apps/locust unchanged
+service/locust unchanged
+[INFO] Importing image into k3d cluster...
+INFO[0003] Successfully imported image(s)               
+INFO[0003] Successfully imported 1 image(s) into 1 cluster(s) 
+[OK] Image imported
+[INFO] Restarting Locust deployment...
+deployment.apps/locust restarted
+Waiting for deployment "locust" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "locust" rollout to finish: 1 old replicas are pending termination...
+deployment "locust" successfully rolled out
+[OK] Locust redeployed with updated locustfile
+[INFO] Ensuring service labels for Prometheus scraping...
+service/api not labeled
+service/app not labeled
+service/db not labeled
+[OK] Service labels verified
+[INFO] Starting port-forwards...
+[OK] Prometheus port-forward active (PID: 7471)
+[OK] Locust port-forward active (PID: 7503)
+[INFO] Starting 30-minute baseline load test...
+  Host: http://app:8080
+  Shape: ProductionDayShape (30 min phased)
+  Start: Wed Feb 18 11:01:51 IST 2026
+[OK] Test started
+[INFO] Monitoring test progress (30 minutes)...
+  Live dashboard: http://localhost:8089/
+  ⏱  4 / 30 min | Requests: 162887   | RPS: 570    | Fails: 66184 [INFO] ━━━ Collecting metrics: 05min_ramp (T+5min) ━━━
+
+============================================================
+AURA Metrics Collection — Mode: BASELINE
+============================================================
+
+Collection window: 2026-02-18T05:06:51Z to 2026-02-18T05:36:51Z
+Duration: 30 minutes
+
+[1/6] Collecting cluster hardware metadata...
+  Nodes: 2
+  Total allocatable CPU: 8.0 cores
+  Total allocatable memory: 15.5 GB
+
+[2/6] Collecting resource requests (for cost estimation)...
+  Total CPU requested: 0.6 cores
+  Total memory requested: 1.25 GB
+
+[3/6] Collecting per-service Prometheus metrics...
+  Querying api...
+  Querying app...
+  Querying db...
+
+[4/6] Collecting cluster-wide usage...
+  Total CPU used: 0.9286 cores
+  Total memory used: 1.1189 GB
+  Total RPS: 671.61
+
+[5/6] Checking SLA violations (p99 > 2000ms)...
+  No SLA violations detected
+
+[6/6] Collecting time series for graphs...
+  api: avg 1.0 replicas, 0.5 replica-hours
+  app: avg 1.0 replicas, 0.5 replica-hours
+  db: avg 1.0 replicas, 0.5 replica-hours
+
+[OUTPUT] Metrics saved to: docs/Final Results/baseline_metrics_20260218_053652.json
+
+[OUTPUT] Exporting time series CSVs...
+  Exported: docs/Final Results/replicas_over_time_baseline.csv
+  Exported: docs/Final Results/p99_over_time_baseline.csv
+  Exported: docs/Final Results/cpu_usage_over_time_baseline.csv
+
+============================================================
+COLLECTION COMPLETE
+============================================================
+Mode: baseline
+Duration: 30 minutes
+Total queries executed: 35
+Output directory: docs/Final Results
+
+[VALIDATION]
+  All critical metrics collected successfully
+[OK] Metrics collected: 05min_ramp
+  ⏱ 14 / 30 min | Requests: 683550   | RPS: 1030   | Fails: 386240[INFO] ━━━ Collecting metrics: 15min_spike (T+15min) ━━━
+
+============================================================
+AURA Metrics Collection — Mode: BASELINE
+============================================================
+
+Collection window: 2026-02-18T05:16:51Z to 2026-02-18T05:46:51Z
+Duration: 30 minutes
+
+[1/6] Collecting cluster hardware metadata...
+  Nodes: 2
+  Total allocatable CPU: 8.0 cores
+  Total allocatable memory: 15.5 GB
+
+[2/6] Collecting resource requests (for cost estimation)...
+  Total CPU requested: 0.6 cores
+  Total memory requested: 1.25 GB
+
+[3/6] Collecting per-service Prometheus metrics...
+  Querying api...
+  Querying app...
+  Querying db...
+
+[4/6] Collecting cluster-wide usage...
+  Total CPU used: 1.0312 cores
+  Total memory used: 1.1701 GB
+  Total RPS: 669.1
+
+[5/6] Checking SLA violations (p99 > 2000ms)...
+  No SLA violations detected
+
+[6/6] Collecting time series for graphs...
+  api: avg 1.0 replicas, 0.5 replica-hours
+  app: avg 1.0 replicas, 0.5 replica-hours
+  db: avg 1.0 replicas, 0.5 replica-hours
+
+[OUTPUT] Metrics saved to: docs/Final Results/baseline_metrics_20260218_054651.json
+
+[OUTPUT] Exporting time series CSVs...
+  Exported: docs/Final Results/replicas_over_time_baseline.csv
+  Exported: docs/Final Results/p99_over_time_baseline.csv
+  Exported: docs/Final Results/cpu_usage_over_time_baseline.csv
+
+============================================================
+COLLECTION COMPLETE
+============================================================
+Mode: baseline
+Duration: 30 minutes
+Total queries executed: 35
+Output directory: docs/Final Results
+
+[VALIDATION]
+  All critical metrics collected successfully
+[OK] Metrics collected: 15min_spike
+  ⏱ 24 / 30 min | Requests: 1245690  | RPS: 291    | Fails: 765043[INFO] ━━━ Collecting metrics: 25min_peak (T+25min) ━━━
+
+============================================================
+AURA Metrics Collection — Mode: BASELINE
+============================================================
+
+Collection window: 2026-02-18T05:26:51Z to 2026-02-18T05:56:51Z
+Duration: 30 minutes
+
+[1/6] Collecting cluster hardware metadata...
+  Nodes: 2
+  Total allocatable CPU: 8.0 cores
+  Total allocatable memory: 15.5 GB
+
+[2/6] Collecting resource requests (for cost estimation)...
+  Total CPU requested: 0.6 cores
+  Total memory requested: 1.25 GB
+
+[3/6] Collecting per-service Prometheus metrics...
+  Querying api...
+  Querying app...
+  Querying db...
+
+[4/6] Collecting cluster-wide usage...
+  Total CPU used: 0.8563 cores
+  Total memory used: 1.2531 GB
+  Total RPS: 609.1
+
+[5/6] Checking SLA violations (p99 > 2000ms)...
+  No SLA violations detected
+
+[6/6] Collecting time series for graphs...
+  api: avg 1.0 replicas, 0.5 replica-hours
+  app: avg 1.0 replicas, 0.5 replica-hours
+  db: avg 1.0 replicas, 0.5 replica-hours
+
+[OUTPUT] Metrics saved to: docs/Final Results/baseline_metrics_20260218_055651.json
+
+[OUTPUT] Exporting time series CSVs...
+  Exported: docs/Final Results/replicas_over_time_baseline.csv
+  Exported: docs/Final Results/p99_over_time_baseline.csv
+  Exported: docs/Final Results/cpu_usage_over_time_baseline.csv
+
+============================================================
+COLLECTION COMPLETE
+============================================================
+Mode: baseline
+Duration: 30 minutes
+Total queries executed: 35
+Output directory: docs/Final Results
+
+[VALIDATION]
+  All critical metrics collected successfully
+[OK] Metrics collected: 25min_peak
+  ⏱ 30 / 30 min | Requests: 1339544  | RPS: 304    | Fails: 765043
+[OK] Test completed after 30 minutes
+[INFO] Running final metrics collection...
+[INFO] ━━━ Collecting metrics: final (T+30min) ━━━
+
+============================================================
+AURA Metrics Collection — Mode: BASELINE
+============================================================
+
+Collection window: 2026-02-18T05:32:25Z to 2026-02-18T06:02:25Z
+Duration: 30 minutes
+
+[1/6] Collecting cluster hardware metadata...
+  Nodes: 2
+  Total allocatable CPU: 8.0 cores
+  Total allocatable memory: 15.5 GB
+
+[2/6] Collecting resource requests (for cost estimation)...
+  Total CPU requested: 0.6 cores
+  Total memory requested: 1.25 GB
+
+[3/6] Collecting per-service Prometheus metrics...
+  Querying api...
+  Querying app...
+  Querying db...
+
+[4/6] Collecting cluster-wide usage...
+  Total CPU used: 0.495 cores
+  Total memory used: 1.2581 GB
+  Total RPS: 448.34
+
+[5/6] Checking SLA violations (p99 > 2000ms)...
+  No SLA violations detected
+
+[6/6] Collecting time series for graphs...
+  api: avg 1.0 replicas, 0.5 replica-hours
+  app: avg 1.0 replicas, 0.5 replica-hours
+  db: avg 1.0 replicas, 0.5 replica-hours
+
+[OUTPUT] Metrics saved to: docs/Final Results/baseline_metrics_20260218_060225.json
+
+[OUTPUT] Exporting time series CSVs...
+  Exported: docs/Final Results/replicas_over_time_baseline.csv
+  Exported: docs/Final Results/p99_over_time_baseline.csv
+  Exported: docs/Final Results/cpu_usage_over_time_baseline.csv
+
+============================================================
+COLLECTION COMPLETE
+============================================================
+Mode: baseline
+Duration: 30 minutes
+Total queries executed: 35
+Output directory: docs/Final Results
+
+[VALIDATION]
+  All critical metrics collected successfully
+[OK] Metrics collected: final
+[INFO] Stopping Locust test...
+[INFO] Waiting for background collectors to finish...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  BASELINE TEST COMPLETE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Start:    Wed Feb 18 11:01:51 IST 2026
+  End:      Wed Feb 18 11:32:25 IST 2026
+  Duration: 30 minutes
+
+Output files:
+-rw-r--r--@ 1 eric  staff    14K 18 Feb 11:06 /Users/eric/Documents/GitHub/AURA/docs/Final Results/baseline_metrics_20260218_053652.json
+-rw-r--r--@ 1 eric  staff    14K 18 Feb 11:16 /Users/eric/Documents/GitHub/AURA/docs/Final Results/baseline_metrics_20260218_054651.json
+-rw-r--r--@ 1 eric  staff    14K 18 Feb 11:26 /Users/eric/Documents/GitHub/AURA/docs/Final Results/baseline_metrics_20260218_055651.json
+-rw-r--r--@ 1 eric  staff    14K 18 Feb 11:32 /Users/eric/Documents/GitHub/AURA/docs/Final Results/baseline_metrics_20260218_060225.json
+
+CSV time-series:
+  -rw-r--r--@ 1 eric  staff   5.7K 18 Feb 11:32 /Users/eric/Documents/GitHub/AURA/docs/Final Results/cpu_usage_over_time_baseline.csv
+  -rw-r--r--@ 1 eric  staff   4.8K 18 Feb 11:32 /Users/eric/Documents/GitHub/AURA/docs/Final Results/p99_over_time_baseline.csv
+  -rw-r--r--@ 1 eric  staff   4.7K 18 Feb 11:32 /Users/eric/Documents/GitHub/AURA/docs/Final Results/replicas_over_time_baseline.csv
+
+[OK] All done!
+
+[INFO] Cleaning up...
+tools/run_baseline_test.sh: line 50:  7471 Terminated: 15          kubectl port-forward -n monitoring svc/kube-prom-kube-prometheus-prometheus 9090:9090 >&/tmp/prom-portforward.log
+tools/run_baseline_test.sh: line 50:  7503 Terminated: 15          kubectl port-forward deployment/locust 8089:8089 >&/tmp/locust-portforward.log
+[OK] Cleanup done
+bash tools/run_baseline_test.sh  6.96s user 5.91s system 0% cpu 30:52.27 total
