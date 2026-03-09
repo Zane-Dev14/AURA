@@ -100,7 +100,13 @@ class ProductionDayShape(LoadTestShape):
 
     def __init__(self):
         super().__init__()
-        self.phases = [
+        # Simplified demo phases:
+        # First minute ramp to 300 users, then ramp to 500 users.
+        # The original detailed phase list is preserved below as a commented
+        # block in case you want to restore it later.
+        """
+        Original phased shape (kept for reference):
+        [
             (180,  1000,  400),    # 0-3min:   ramp to 900 users
             (480,  1000,  400),    # 3-8min:   hold at 900
             (660,  2000,  500),    # 8-11min:  ramp to 1500 users
@@ -109,6 +115,16 @@ class ProductionDayShape(LoadTestShape):
             (1440, 4000, 800),    # 19-24min: sustain peak 2500
             (1620, 500,  300),    # 24-27min: drop to 500 users
             (1800, 500,  100),    # 27-30min: hold at 500 (steady)
+        ]
+        """
+
+        # Demo: two hard phases for an aggressive demo load:
+        #  - 0-60s  -> ramp to 500 users at 350 users/sec (spawn rate)
+        #  - 60-120s -> ramp to 700 users at 500 users/sec (spawn rate)
+        # Keep user counts and spawn rates, lengthen phases to ~5 minutes total
+        self.phases = [
+            (90, 700, 450),   # 0-150s -> ramp to 700 at 450/s
+            (300, 1000, 600),  # 150-300s -> ramp to 1000 at 600/s (ends ~5min)
         ]
 
     def tick(self):
