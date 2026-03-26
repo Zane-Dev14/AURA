@@ -11,6 +11,8 @@ deployment/logs/
 
 # ML artifacts
 *.pth
+Frontend/node_modules/*
+node_modules/
 
 # Python
 __pycache__/
