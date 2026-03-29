@@ -42,20 +42,22 @@ export default function MetricsDashboard() {
 
   return (
     <div className="metrics-panel">
-      <div className="metrics-title">SYSTEM METRICS</div>
-      {rows.map((r) => (
-        <div key={r.label} className="metrics-row">
-          <span className="metrics-label">{r.label}</span>
-          <span className={`metrics-value ${r.good ? 'good' : 'bad'}`}>
-            <AnimatedValue value={r.value} suffix={r.suffix} decimals={r.decimals} />
-          </span>
-        </div>
-      ))}
-      {scene === 'comparison' && (
-        <div className="metrics-comparison-hint">
-          QMix: 88.6% faster P99 · 50pp safer CPU
-        </div>
-      )}
+      <div className="metrics-panel-inner">
+        <div className="metrics-title">SYSTEM METRICS</div>
+        {rows.map((r) => (
+          <div key={r.label} className="metrics-row">
+            <span className="metrics-label">{r.label}</span>
+            <span className={`metrics-value ${r.good ? 'good' : 'bad'}`}>
+              <AnimatedValue value={r.value} suffix={r.suffix} decimals={r.decimals} />
+            </span>
+          </div>
+        ))}
+        {scene === 'comparison' && (
+          <div className="metrics-comparison-hint">
+            QMix: 88.6% faster P99 · 50pp safer CPU
+          </div>
+        )}
+      </div>
     </div>
   )
 }

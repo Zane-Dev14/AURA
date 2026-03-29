@@ -13,7 +13,7 @@ export async function POST() {
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     proc.stdout.on('data', () => { globalThis.__locustReady = true })
-    proc.stderr.on('data', (d) => {
+    proc.stderr.on('data', (d: Buffer) => {
       const msg = d.toString()
       if (msg.includes('Forwarding from')) globalThis.__locustReady = true
     })

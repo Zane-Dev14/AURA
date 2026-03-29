@@ -1,14 +1,15 @@
 'use client'
 import { Canvas } from '@react-three/fiber'
 import { Environment, PerformanceMonitor, Preload, Stars } from '@react-three/drei'
-import { Suspense, useState, useEffect } from 'react'
-import { EffectComposer, Bloom, ChromaticAberration } from '@react-three/postprocessing'
+import { Suspense, useState } from 'react'
+import { EffectComposer, Bloom, ChromaticAberration, Vignette } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
 import { Vector2 } from 'three'
 import { useSceneStore } from '@/store/useSceneStore'
 import SceneManager from './SceneManager'
 import SceneHUD from './ui/SceneHUD'
 import LoadingGate from './LoadingGate'
+import FilmGrainOverlay from './ui/FilmGrainOverlay'
 import { unlockAudio } from '@/lib/sound'
 
 export default function AuraDemo() {
@@ -23,9 +24,16 @@ export default function AuraDemo() {
   const bloomIntensity = scene === 'transform' ? 8 : scene === 'recovery' ? 3 : 1.2
   const chromaticOffset = glitchIntensity * 0.005
 
+  // Vignette darkness varies per scene mood
+  const vignetteDarkness =
+    scene === 'failure' || scene === 'emotional' ? 0.85
+    : scene === 'transform' ? 0.5
+    : 0.7
+
   return (
     <div
       className="aura-root"
+      data-scene={scene}
       onClick={handleFirstInteraction}
       onKeyDown={handleFirstInteraction}
     >
@@ -64,10 +72,16 @@ export default function AuraDemo() {
             blendFunction={BlendFunction.NORMAL}
             offset={new Vector2(chromaticOffset, chromaticOffset)}
           />
+          <Vignette
+            eskil={false}
+            offset={0.3}
+            darkness={vignetteDarkness}
+          />
         </EffectComposer>
       </Canvas>
       <LoadingGate />
       <SceneHUD />
+      <FilmGrainOverlay />
     </div>
   )
 }

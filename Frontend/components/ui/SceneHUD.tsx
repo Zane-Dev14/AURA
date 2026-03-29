@@ -20,34 +20,52 @@ const SCENE_BUTTONS: Array<{
   { scene: 'comparison',label: '',                       action: 'comparison', styles: '' },
 ]
 
+// Tactical [XX] labels — darknode style
 const SCENE_LABELS: Record<Scene, string> = {
-  calm: '① Calm World',
-  system: '② Kubernetes Cluster',
-  traffic: '③ Traffic Surge',
-  failure: '④ System Failure',
-  emotional: '⑤ Critical State',
-  qmix: '⑥ QMix Ready',
-  transform: '⑦ Transforming...',
-  recovery: '⑧ Recovery',
-  comparison: '⑨ HPA vs QMix',
+  calm:       '[01] CALM WORLD',
+  system:     '[02] KUBERNETES CLUSTER',
+  traffic:    '[03] TRAFFIC SURGE',
+  failure:    '[04] SYSTEM FAILURE',
+  emotional:  '[05] CRITICAL STATE',
+  qmix:      '[06] QMIX READY',
+  transform:  '[07] TRANSFORMING',
+  recovery:   '[08] RECOVERY',
+  comparison: '[09] HPA vs QMIX',
 }
+
+const SCENE_ORDER: Scene[] = [
+  'calm', 'system', 'traffic', 'failure', 'emotional',
+  'qmix', 'transform', 'recovery', 'comparison',
+]
 
 export default function SceneHUD() {
   const { scene, setScene, skipTo, resetDemo, assetsLoaded } = useSceneStore()
   if (!assetsLoaded) return null
 
   const btn = SCENE_BUTTONS.find((b) => b.scene === scene)
+  const currentIndex = SCENE_ORDER.indexOf(scene)
 
   return (
     <div className="hud-root">
       {/* Top bar */}
       <div className="hud-topbar">
         <div className="hud-logo">AURA</div>
+
+        {/* Stage dots */}
+        <div className="stage-dots">
+          {SCENE_ORDER.map((s, i) => (
+            <div
+              key={s}
+              className={`stage-dot ${i === currentIndex ? 'active' : i < currentIndex ? 'past' : ''}`}
+            />
+          ))}
+        </div>
+
         <div className="hud-scene-label">{SCENE_LABELS[scene]}</div>
         <div className="hud-controls">
-          <button className="btn-hud-sm" onClick={() => resetDemo()}>↺ Restart</button>
-          <button className="btn-hud-sm" onClick={() => skipTo('transform')}>⚡ Skip to QMix</button>
-          <button className="btn-hud-sm" onClick={() => skipTo('comparison')}>📊 Comparison</button>
+          <button className="btn-hud-sm" onClick={() => resetDemo()}>↺ RESTART</button>
+          <button className="btn-hud-sm" onClick={() => skipTo('transform')}>⚡ SKIP</button>
+          <button className="btn-hud-sm" onClick={() => skipTo('comparison')}>📊 COMPARE</button>
         </div>
       </div>
 

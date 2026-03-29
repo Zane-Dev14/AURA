@@ -15,13 +15,20 @@ export default function LoadingGate() {
 
   return (
     <div className="loading-gate">
+      {/* Crosshair reticle behind content */}
+      <div className="loading-reticle" />
+
       <div className="loading-content">
-        <div className="loading-logo">AURA</div>
-        <div className="loading-subtitle">Kubernetes Intelligence System</div>
-        <div className="loading-bar-wrap">
-          <div className="loading-bar-fill" />
+        {/* Corner brackets around loading area */}
+        <div className="loading-bracket-wrap">
+          <div className="loading-bracket-bottom" />
+          <div className="loading-logo">AURA</div>
+          <div className="loading-subtitle">Kubernetes Intelligence System</div>
+          <div className="loading-bar-wrap">
+            <div className="loading-bar-fill" />
+          </div>
+          <div className="loading-text">Initializing Cluster Simulation…</div>
         </div>
-        <div className="loading-text">Initializing Cluster Simulation…</div>
       </div>
     </div>
   )
