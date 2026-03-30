@@ -57,11 +57,8 @@ export default function SystemReveal() {
         visible={t.current < 0.55}
       />
       {/* Grid floor for cluster world */}
-      <gridHelper args={[30, 30, '#001a3e', '#001a3e']} position={[0, -1.5, 0]} />
-      <mesh position={[0, -1.6, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[40, 40]} />
-        <meshStandardMaterial color="#000814" transparent opacity={0.95} />
-      </mesh>
+      
+      
       <PodGrid />
       <ServiceBeam />
       <Airship />

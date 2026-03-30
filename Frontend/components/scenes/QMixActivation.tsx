@@ -30,11 +30,8 @@ export default function QMixActivation() {
       <ambientLight intensity={0.15} color="#001133" />
       <pointLight position={[0, 4, 0]} intensity={1.5} color="#0044ff" />
       <pointLight position={[0, -2, 0]} intensity={0.8} color="#003388" />
-      <mesh position={[0, -1.6, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[40, 40]} />
-        <meshStandardMaterial color="#000008" transparent opacity={0.97} />
-      </mesh>
-      <gridHelper args={[30, 30, '#001133', '#000a1f']} position={[0, -1.5, 0]} />
+      
+      
       <PodGrid />
       <TrafficParticles />
       <Airship />

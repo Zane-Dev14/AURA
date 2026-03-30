@@ -77,11 +77,8 @@ export default function Transformation() {
       <ambientLight intensity={0.3} color="#001133" />
       <pointLight position={[0, 6, 0]} intensity={4} color="#00f0ff" />
       <pointLight position={[0, -2, 0]} intensity={2} color="#0099ff" />
-      <mesh position={[0, -1.6, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[40, 40]} />
-        <meshStandardMaterial color="#000510" transparent opacity={0.97} />
-      </mesh>
-      <gridHelper args={[30, 30, '#001a3e', '#000d20']} position={[0, -1.5, 0]} />
+      
+      
       <PodGrid />
       <ServiceBeam />
       <TrafficParticles />

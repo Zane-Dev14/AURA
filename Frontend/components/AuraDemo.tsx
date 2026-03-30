@@ -4,7 +4,7 @@ import { Environment, PerformanceMonitor, Preload, Stars } from '@react-three/dr
 import { Suspense, useState } from 'react'
 import { EffectComposer, Bloom, ChromaticAberration, Vignette } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
-import { Vector2 } from 'three'
+import * as THREE from 'three'
 import { useSceneStore } from '@/store/useSceneStore'
 import SceneManager from './SceneManager'
 import SceneHUD from './ui/SceneHUD'
@@ -39,10 +39,17 @@ export default function AuraDemo() {
     >
       <Canvas
         dpr={[1, dpr]}
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
-        camera={{ position: [0, 4, 12], fov: 60 }}
+        gl={{
+          antialias: true,
+          powerPreference: 'high-performance',
+          toneMappingExposure: 1.2,
+          toneMapping: THREE.ACESFilmicToneMapping
+        }}
+        camera={{ position: [0, 8, 20], fov: 55, near: 0.1, far: 200 }}
         style={{ background: '#000' }}
       >
+        <fog attach="fog" args={['#010308', 15, 100]} />
+        <color attach="background" args={['#000205']} />
         <PerformanceMonitor
           onDecline={() => setDpr(1)}
           onIncline={() => setDpr(1.5)}
@@ -52,25 +59,27 @@ export default function AuraDemo() {
             files={
               scene === 'recovery' || scene === 'comparison'
                 ? '/models/spruit_sunrise_4k.exr'
-                : '/models/evening_meadow_4k.exr'
+                : '/models/1082ab60-0925-4509-9e69-90a7dfce573c.hdr'
             }
             background
-            backgroundBlurriness={0.3}
+            backgroundBlurriness={0}
+            backgroundIntensity={0.4}
+            environmentIntensity={1.5}
           />
-          <Stars radius={80} depth={50} count={3000} factor={3} fade speed={0.5} />
+          <Stars radius={100} depth={80} count={5000} factor={4} fade speed={0.3} />
           <SceneManager />
           <Preload all />
         </Suspense>
         <EffectComposer>
           <Bloom
-            intensity={bloomIntensity}
-            luminanceThreshold={0.3}
+            intensity={bloomIntensity * 0.3}
+            luminanceThreshold={0.8}
             luminanceSmoothing={0.9}
             mipmapBlur
           />
           <ChromaticAberration
             blendFunction={BlendFunction.NORMAL}
-            offset={new Vector2(chromaticOffset, chromaticOffset)}
+            offset={new THREE.Vector2(chromaticOffset, chromaticOffset)}
           />
           <Vignette
             eskil={false}

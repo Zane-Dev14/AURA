@@ -1,85 +1,64 @@
 'use client'
 import { useRef, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { useSceneStore } from '@/store/useSceneStore'
 import * as THREE from 'three'
 
-const COUNT = 800
+const COUNT = 1600
+const TUNNEL_DEPTH = 120
 
 export default function TrafficParticles() {
   const pointsRef = useRef<THREE.Points>(null)
-  const { trafficLevel, podHealth, frozen } = useSceneStore()
 
   const positions = useMemo(() => {
     const arr = new Float32Array(COUNT * 3)
     for (let i = 0; i < COUNT; i++) {
-      arr[i * 3 + 0] = (Math.random() - 0.5) * 20
-      arr[i * 3 + 1] = Math.random() * 6 - 1
-      arr[i * 3 + 2] = (Math.random() - 0.5) * 20
+      // Cylinder distribution to form an infinite space tunnel
+      const radius = 5 + Math.random() * 30
+      const angle = Math.random() * Math.PI * 2
+      arr[i * 3 + 0] = Math.cos(angle) * radius 
+      // Add slight offset so it feels scattered, not purely cylindrical
+      arr[i * 3 + 1] = Math.sin(angle) * radius + (Math.random() - 0.5) * 5
+      
+      // Z-depth placement (-120 to +10)
+      arr[i * 3 + 2] = 10 - Math.random() * TUNNEL_DEPTH
     }
     return arr
   }, [])
 
-  const velocities = useMemo(() => {
-    const arr = new Float32Array(COUNT * 3)
-    for (let i = 0; i < COUNT; i++) {
-      // Bias toward center (service beam at 0,0,0)
-      arr[i * 3 + 0] = (Math.random() - 0.5) * 0.02
-      arr[i * 3 + 1] = (Math.random() - 0.5) * 0.01
-      arr[i * 3 + 2] = (Math.random() - 0.5) * 0.02
-    }
-    return arr
-  }, [])
-
-  useFrame((_, delta) => {
-    if (!pointsRef.current || frozen) return
+  useFrame((state, delta) => {
+    if (!pointsRef.current) return
     const pos = pointsRef.current.geometry.attributes.position.array as Float32Array
-    const speed = trafficLevel * 4 + 0.5
-
+    
     for (let i = 0; i < COUNT; i++) {
       const idx = i * 3
-      // Move toward center
-      const cx = pos[idx] * -0.02 * speed
-      const cz = pos[idx + 2] * -0.02 * speed
-      pos[idx] += (velocities[idx] + cx) * delta * speed
-      pos[idx + 1] += velocities[idx + 1] * delta
-      pos[idx + 2] += (velocities[idx + 2] + cz) * delta * speed
-
-      // Wrap around
-      const dist = Math.sqrt(pos[idx] ** 2 + pos[idx + 2] ** 2)
-      if (dist < 0.5 || dist > 14) {
-        pos[idx] = (Math.random() - 0.5) * 20
-        pos[idx + 1] = Math.random() * 6 - 1
-        pos[idx + 2] = (Math.random() - 0.5) * 20
+      // Rapid forward movement creates the illusion of ship traveling
+      pos[idx + 2] += delta * 18.0
+      
+      // Organic swaying over time
+      pos[idx + 0] += Math.sin(state.clock.elapsedTime + pos[idx+2] * 0.1) * 0.015
+      
+      // Wrap around when passing the camera (+Z)
+      if (pos[idx + 2] > 10) {
+        pos[idx + 2] = -TUNNEL_DEPTH
       }
     }
+    
     pointsRef.current.geometry.attributes.position.needsUpdate = true
-
-    // Point size driven by traffic
-    const mat = pointsRef.current.material as THREE.PointsMaterial
-    mat.size = 0.06 + trafficLevel * 0.08
-    mat.opacity = 0.4 + trafficLevel * 0.5
-
-    // Color: healthy=cyan, failing=red
-    mat.color = new THREE.Color().lerpColors(
-      new THREE.Color(0xff3300),
-      new THREE.Color(0x00eeff),
-      podHealth
-    )
   })
 
   return (
     <points ref={pointsRef}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+        <bufferAttribute attach="attributes-position" count={COUNT} array={positions} itemSize={3} />
       </bufferGeometry>
       <pointsMaterial
-        size={0.06}
-        color="#00eeff"
+        size={0.15}
+        color="#aaddff"
         transparent
-        opacity={0.5}
+        opacity={0.6}
         sizeAttenuation
         depthWrite={false}
+        blending={THREE.AdditiveBlending}
       />
     </points>
   )

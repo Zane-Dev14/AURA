@@ -127,11 +127,8 @@ export default function ComparisonScene() {
       <directionalLight position={[0, 10, 5]} intensity={1} />
       <pointLight position={[-9, 4, 0]} intensity={2} color="#ff4400" />
       <pointLight position={[9, 4, 0]} intensity={2} color="#00ccff" />
-      <mesh position={[0, -1.6, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[50, 40]} />
-        <meshStandardMaterial color="#000814" transparent opacity={0.97} />
-      </mesh>
-      <gridHelper args={[40, 40, '#0a1a2e', '#050d17']} position={[0, -1.5, 0]} />
+      
+      
 
       {/* Divider */}
       <mesh position={[0, 1, 0]}>

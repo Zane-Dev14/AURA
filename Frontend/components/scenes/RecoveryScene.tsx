@@ -39,11 +39,8 @@ export default function RecoveryScene() {
       <pointLight position={[0, 6, 0]} intensity={3} color="#00ff88" />
       <pointLight position={[0, -2, 8]} intensity={1.5} color="#00aaff" />
       <directionalLight position={[10, 10, 5]} intensity={1} color="#aaffdd" />
-      <mesh position={[0, -1.6, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[40, 40]} />
-        <meshStandardMaterial color="#000a05" transparent opacity={0.95} />
-      </mesh>
-      <gridHelper args={[30, 30, '#003322', '#001a10']} position={[0, -1.5, 0]} />
+      
+      
       <PodGrid />
       <ServiceBeam />
       <TrafficParticles />
