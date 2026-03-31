@@ -2,6 +2,7 @@
 import { useSceneStore } from '@/store/useSceneStore'
 import { Suspense } from 'react'
 import dynamic from 'next/dynamic'
+import CameraController from './r3f/CameraController'
 
 const CalmWorld = dynamic(() => import('./scenes/CalmWorld'), { ssr: false })
 const SystemReveal = dynamic(() => import('./scenes/SystemReveal'), { ssr: false })
@@ -17,16 +18,19 @@ export default function SceneManager() {
   const { scene } = useSceneStore()
 
   return (
-    <Suspense fallback={null}>
-      {scene === 'calm' && <CalmWorld />}
-      {scene === 'system' && <SystemReveal />}
-      {scene === 'traffic' && <TrafficScene />}
-      {scene === 'failure' && <FailureScene />}
-      {scene === 'emotional' && <EmotionalBeat />}
-      {scene === 'qmix' && <QMixActivation />}
-      {scene === 'transform' && <Transformation />}
-      {scene === 'recovery' && <RecoveryScene />}
-      {scene === 'comparison' && <ComparisonScene />}
-    </Suspense>
+    <>
+      <CameraController />
+      <Suspense fallback={null}>
+        {scene === 'calm' && <CalmWorld />}
+        {scene === 'system' && <SystemReveal />}
+        {scene === 'traffic' && <TrafficScene />}
+        {scene === 'failure' && <FailureScene />}
+        {scene === 'emotional' && <EmotionalBeat />}
+        {scene === 'qmix' && <QMixActivation />}
+        {scene === 'transform' && <Transformation />}
+        {scene === 'recovery' && <RecoveryScene />}
+        {scene === 'comparison' && <ComparisonScene />}
+      </Suspense>
+    </>
   )
 }

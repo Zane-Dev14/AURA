@@ -41,6 +41,7 @@ interface SceneStore {
   qmixPid: number | null
   qmixStatusMsg: string
   assetsLoaded: boolean
+  introComplete: boolean
 
   setScene: (s: Scene) => void
   setPodCount: (n: number) => void
@@ -54,6 +55,7 @@ interface SceneStore {
   setQmixPid: (pid: number | null) => void
   setQmixStatusMsg: (msg: string) => void
   setAssetsLoaded: (v: boolean) => void
+  setIntroComplete: (v: boolean) => void
   resetDemo: () => void
   skipTo: (s: Scene) => void
 }
@@ -80,6 +82,7 @@ export const useSceneStore = create<SceneStore>((set) => ({
   qmixPid: null,
   qmixStatusMsg: '',
   assetsLoaded: false,
+  introComplete: false,
 
   setScene: (scene) => set({ scene }),
   setPodCount: (podCount) => set({ podCount }),
@@ -93,6 +96,7 @@ export const useSceneStore = create<SceneStore>((set) => ({
   setQmixPid: (qmixPid) => set({ qmixPid }),
   setQmixStatusMsg: (qmixStatusMsg) => set({ qmixStatusMsg }),
   setAssetsLoaded: (assetsLoaded) => set({ assetsLoaded }),
+  setIntroComplete: (introComplete) => set({ introComplete }),
 
   resetDemo: () =>
     set({

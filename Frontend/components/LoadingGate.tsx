@@ -2,38 +2,62 @@
 import { useSceneStore } from '@/store/useSceneStore'
 import { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import gsap from 'gsap'
 
 export default function LoadingGate() {
   const { assetsLoaded, setAssetsLoaded } = useSceneStore()
   const [progress, setProgress] = useState(0)
   const [phase, setPhase] = useState<'loading' | 'complete' | 'exit'>('loading')
+  const [showSkip, setShowSkip] = useState(false)
   const progressRef = useRef(0)
 
-  // Simulate loading progress with realistic timing
+  // Much faster loading - 2-3 seconds max
   useEffect(() => {
     const interval = setInterval(() => {
-      progressRef.current += Math.random() * 15
+      progressRef.current += Math.random() * 25 + 15 // Faster increments
       if (progressRef.current >= 100) {
         progressRef.current = 100
         clearInterval(interval)
         setTimeout(() => {
           setAssetsLoaded(true)
           setPhase('complete')
-        }, 300)
+        }, 200)
       }
       setProgress(Math.min(progressRef.current, 100))
-    }, 150)
+    }, 100) // Faster updates
 
     return () => clearInterval(interval)
   }, [setAssetsLoaded])
 
-  // Exit animation sequence
+  // Show skip button after 1 second
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSkip(true), 1000)
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Handle skip
+  const handleSkip = () => {
+    setAssetsLoaded(true)
+    setPhase('complete')
+  }
+
+  // Exit animation sequence - faster
   useEffect(() => {
     if (phase === 'complete') {
-      setTimeout(() => setPhase('exit'), 800)
+      setTimeout(() => setPhase('exit'), 400)
     }
   }, [phase])
+
+  // Handle keyboard skip
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if ((e.key === ' ' || e.key === 'Enter') && showSkip && progress < 100) {
+        e.preventDefault()
+        handleSkip()
+      }
+    }
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [showSkip, progress, handleSkip])
 
   if (phase === 'exit') return null
 
@@ -156,6 +180,22 @@ export default function LoadingGate() {
             <div className="loading-decoration-dot" />
             <div className="loading-decoration-line" />
           </motion.div>
+
+          {/* Skip button */}
+          {showSkip && progress < 100 && (
+            <motion.button
+              className="loading-skip-button"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              onClick={handleSkip}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <span>Skip Intro</span>
+              <span className="skip-hint">Press SPACE</span>
+            </motion.button>
+          )}
         </div>
 
         {/* Floating particles */}

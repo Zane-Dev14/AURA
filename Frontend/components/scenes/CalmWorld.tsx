@@ -1,96 +1,51 @@
 'use client'
-import { useRef, useEffect } from 'react'
-import { useFrame, useThree } from '@react-three/fiber'
+import { useRef, useState } from 'react'
+import { useFrame } from '@react-three/fiber'
 import { useSceneStore } from '@/store/useSceneStore'
 import Airship from '@/components/r3f/Airship'
+import FloatingRing from '@/components/r3f/FloatingRing'
+import Ground from '@/components/r3f/Ground'
+import AtmosphericParticles from '@/components/r3f/AtmosphericParticles'
+import BackgroundElements from '@/components/r3f/BackgroundElements'
+import { Text } from '@react-three/drei'
 import * as THREE from 'three'
-import gsap from 'gsap'
 
 export default function CalmWorld() {
-  const { camera } = useThree()
-  const { assetsLoaded } = useSceneStore()
+  const { setScene } = useSceneStore()
   const lightRef = useRef<THREE.PointLight>(null)
   const spotlightRef = useRef<THREE.SpotLight>(null)
-  const cameraRigRef = useRef({ phase: 0, radius: 15, height: 5 })
+  const [ringsCollected, setRingsCollected] = useState(0)
+  const transitionTriggered = useRef(false)
 
-  // Cinematic camera intro - dramatic reveal
-  useEffect(() => {
-    if (assetsLoaded) {
-      // Start with dramatic high angle
-      camera.position.set(-20, 12, 20)
-      camera.lookAt(0, 2, 0)
-
-      // Create cinematic camera movement sequence
-      const timeline = gsap.timeline()
-      
-      // Phase 1: Dramatic sweep in
-      timeline.to(camera.position, {
-        x: -8,
-        y: 6,
-        z: 15,
-        duration: 4,
-        ease: 'power2.inOut',
-      })
-      
-      // Phase 2: Circle around to hero angle
-      timeline.to(camera.position, {
-        x: 5,
-        y: 4,
-        z: 12,
-        duration: 3.5,
-        ease: 'power1.inOut',
-      }, '-=1')
-      
-      // Phase 3: Settle into showcase position
-      timeline.to(camera.position, {
-        x: 0,
-        y: 5,
-        z: 14,
-        duration: 2.5,
-        ease: 'power2.out',
-      })
-    }
-  }, [assetsLoaded, camera])
-
-  // Dynamic camera orbit for showcase feel
-  useFrame((state, delta) => {
+  // Camera now controlled by Airship component
+  useFrame((state) => {
     const t = state.clock.elapsedTime
 
-    // After intro, gentle orbital movement
-    if (t > 10) {
-      cameraRigRef.current.phase += delta * 0.08
-      
-      // Smooth orbital path
-      const orbitX = Math.sin(cameraRigRef.current.phase) * cameraRigRef.current.radius
-      const orbitZ = Math.cos(cameraRigRef.current.phase) * cameraRigRef.current.radius
-      const orbitY = cameraRigRef.current.height + Math.sin(cameraRigRef.current.phase * 0.5) * 1.5
-      
-      // Smooth interpolation to orbital position
-      camera.position.x += (orbitX - camera.position.x) * 0.01
-      camera.position.y += (orbitY - camera.position.y) * 0.01
-      camera.position.z += (orbitZ - camera.position.z) * 0.01
-    }
-
-    // Always look at airship with slight offset for drama
-    const lookTarget = new THREE.Vector3(
-      Math.sin(t * 0.2) * 0.5,
-      2.5 + Math.cos(t * 0.3) * 0.3,
-      0
-    )
-    camera.lookAt(lookTarget)
-
-    // Animate key light for drama
+    // Animate lights
     if (lightRef.current) {
-      lightRef.current.intensity = 2.5 + Math.sin(t * 0.5) * 0.3
-      lightRef.current.position.x = 8 + Math.sin(t * 0.3) * 2
-      lightRef.current.position.z = 10 + Math.cos(t * 0.4) * 2
+      lightRef.current.intensity = 3 + Math.sin(t * 0.5) * 0.5
+      lightRef.current.position.x = 10 + Math.sin(t * 0.3) * 3
+      lightRef.current.position.z = 12 + Math.cos(t * 0.4) * 3
     }
 
-    // Animate spotlight for hero lighting
     if (spotlightRef.current) {
-      spotlightRef.current.intensity = 3 + Math.sin(t * 0.7) * 0.5
+      spotlightRef.current.intensity = 4 + Math.sin(t * 0.7) * 0.8
     }
   })
+  
+  const handleRingCollect = () => {
+    setRingsCollected(prev => {
+      const newCount = prev + 1
+      // Transition to next scene when all 8 rings collected
+      if (newCount >= 8 && !transitionTriggered.current) {
+        transitionTriggered.current = true
+        setTimeout(() => {
+          setScene('system')
+        }, 2000) // 2 second delay for celebration
+      }
+      return newCount
+    })
+  }
 
   return (
     <>
@@ -154,8 +109,36 @@ export default function CalmWorld() {
         decay={2}
       />
 
-      {/* THE HERO - AIRSHIP */}
+
+      {/* NEW ENVIRONMENTAL COMPONENTS */}
+      <Ground />
+      <AtmosphericParticles />
+      <BackgroundElements />
+      {/* AIRSHIP */}
       <Airship />
+
+      {/* Progress indicator */}
+      {ringsCollected > 0 && (
+        <Text
+          position={[0, 8, -5]}
+          fontSize={0.8}
+          color="#00e5ff"
+          anchorX="center"
+          anchorY="middle"
+        >
+          {ringsCollected >= 8 ? '✓ All Rings Collected!' : `Rings: ${ringsCollected}/8`}
+        </Text>
+      )}
+
+      {/* FLOATING RINGS TO COLLECT - Tutorial Course */}
+      <FloatingRing position={[0, 3, -8]} onCollect={handleRingCollect} />
+      <FloatingRing position={[-6, 4, -12]} onCollect={handleRingCollect} />
+      <FloatingRing position={[6, 5, -15]} onCollect={handleRingCollect} />
+      <FloatingRing position={[-8, 3, -20]} onCollect={handleRingCollect} />
+      <FloatingRing position={[8, 6, -25]} onCollect={handleRingCollect} />
+      <FloatingRing position={[0, 4, -30]} onCollect={handleRingCollect} />
+      <FloatingRing position={[-10, 5, -35]} onCollect={handleRingCollect} />
+      <FloatingRing position={[10, 3, -40]} onCollect={handleRingCollect} />
 
       {/* ATMOSPHERIC ELEMENTS */}
       
@@ -171,21 +154,24 @@ export default function CalmWorld() {
         />
       </mesh>
 
-      {/* Floating light particles for depth */}
-      {Array.from({ length: 50 }).map((_, i) => {
+      {/* Enhanced floating particles */}
+      {Array.from({ length: 80 }).map((_, i) => {
         const angle = (i / 50) * Math.PI * 2
         const radius = 15 + Math.random() * 10
         const x = Math.cos(angle) * radius
         const z = Math.sin(angle) * radius
         const y = -5 + Math.random() * 20
         
+        const size = 0.05 + Math.random() * 0.15
+        
         return (
           <mesh key={i} position={[x, y, z]}>
-            <sphereGeometry args={[0.05 + Math.random() * 0.1, 8, 8]} />
+            <sphereGeometry args={[size, 8, 8]} />
             <meshBasicMaterial
-              color="#00e5ff"
+              color={i % 3 === 0 ? "#00ffaa" : "#00e5ff"}
               transparent
-              opacity={0.3 + Math.random() * 0.4}
+              opacity={0.4 + Math.random() * 0.5}
+              blending={THREE.AdditiveBlending}
             />
           </mesh>
         )
@@ -267,16 +253,38 @@ export default function CalmWorld() {
         )
       })}
 
-      {/* Holographic grid floor */}
+      {/* Holographic grid floor - extended */}
       <mesh position={[0, -1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[50, 50, 20, 20]} />
+        <planeGeometry args={[100, 100, 40, 40]} />
         <meshBasicMaterial
           color="#00e5ff"
           transparent
-          opacity={0.05}
+          opacity={0.08}
           wireframe
         />
       </mesh>
+
+      {/* Energy field boundaries */}
+      {[
+        { pos: [0, 5, -50], rot: [0, 0, 0] },
+        { pos: [-30, 5, -25], rot: [0, Math.PI / 2, 0] },
+        { pos: [30, 5, -25], rot: [0, -Math.PI / 2, 0] },
+      ].map((wall, i) => (
+        <mesh
+          key={i}
+          position={wall.pos as [number, number, number]}
+          rotation={wall.rot as [number, number, number]}
+        >
+          <planeGeometry args={[60, 20, 10, 10]} />
+          <meshBasicMaterial
+            color="#00e5ff"
+            transparent
+            opacity={0.03}
+            wireframe
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      ))}
     </>
   )
 }
