@@ -7,231 +7,131 @@ import gsap from 'gsap'
 import * as THREE from 'three'
 
 /**
- * IntroSequence - DRAMATIC cinematic intro
- * 
- * Lightning flashes, letters SLAM down with impact,
- * screen shake, particle explosions - pure cinema!
+ * IntroSequence - ELEGANT REVEAL
+ *
+ * Professional, smooth intro inspired by Lusion, Aristide Benoist, and Active Theory
+ * - 2.5 seconds total duration
+ * - Smooth fade-in with gentle camera movement
+ * - Elegant typography with subtle animations
+ * - Ambient particles for atmosphere
+ * - No aggressive effects (no flash, shake, or slam)
  */
 export default function IntroSequence() {
   const { camera, scene } = useThree()
   const { introComplete, setIntroComplete, assetsLoaded } = useSceneStore()
   const timelineRef = useRef<gsap.core.Timeline | null>(null)
   
-  // Letter states
-  const [letterStates, setLetterStates] = useState([
-    { letter: 'A', visible: false, y: 50, landed: false },
-    { letter: 'U', visible: false, y: 50, landed: false },
-    { letter: 'R', visible: false, y: 50, landed: false },
-    { letter: 'A', visible: false, y: 50, landed: false },
-  ])
+  // Animation states
+  const [fadeIn, setFadeIn] = useState(0) // Overall fade from black
+  const [textOpacity, setTextOpacity] = useState(0)
+  const [textScale, setTextScale] = useState(0.95)
+  const [glowIntensity, setGlowIntensity] = useState(0)
   
-  // Effects states
-  const [lightningFlash, setLightningFlash] = useState(0)
-  const [particles, setParticles] = useState<Array<{id: number, x: number, y: number, z: number, vx: number, vy: number, vz: number}>>([])
-  const cameraShake = useRef(new THREE.Vector3())
-  const baseCameraPos = useRef(new THREE.Vector3(0, 5, 15))
-  const particleIdCounter = useRef(0)
+  // Ambient particles for atmosphere
+  const [particles, setParticles] = useState<Array<{
+    id: number
+    x: number
+    y: number
+    z: number
+    vx: number
+    vy: number
+    opacity: number
+  }>>([])
+  
+  const baseCameraPos = useRef(new THREE.Vector3(0, 5, 16))
+  const targetCameraPos = useRef(new THREE.Vector3(0, 5, 15))
+
+  // Initialize ambient particles
+  useEffect(() => {
+    if (!assetsLoaded || introComplete) return
+
+    // Create subtle ambient particles
+    const ambientParticles = []
+    for (let i = 0; i < 80; i++) {
+      ambientParticles.push({
+        id: i,
+        x: (Math.random() - 0.5) * 30,
+        y: Math.random() * 15 - 2,
+        z: (Math.random() - 0.5) * 20 - 5,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: Math.random() * 0.2 + 0.1,
+        opacity: Math.random() * 0.4 + 0.1
+      })
+    }
+    setParticles(ambientParticles)
+  }, [assetsLoaded, introComplete])
 
   useEffect(() => {
     if (!assetsLoaded || introComplete) return
 
-    // Set camera to dramatic starting position
+    // Set camera to starting position
     camera.position.copy(baseCameraPos.current)
     camera.lookAt(0, 0, 0)
 
-    // Create dramatic timeline
+    // Create elegant timeline - 2.5 seconds total
     const timeline = gsap.timeline({
       onComplete: () => {
-        setTimeout(() => setIntroComplete(true), 500)
+        setTimeout(() => setIntroComplete(true), 200)
       }
     })
 
     timelineRef.current = timeline
 
-    // PHASE 1: Initial lightning flash (0-0.3s)
-    timeline.call(() => {
-      setLightningFlash(1)
-      setTimeout(() => setLightningFlash(0), 100)
+    // PHASE 1: Fade In (0.0 - 0.8s)
+    // Gentle fade from black with camera dolly
+    timeline.to({ value: 0 }, {
+      value: 1,
+      duration: 0.8,
+      ease: 'power2.out',
+      onUpdate: function() {
+        setFadeIn(this.targets()[0].value)
+      }
     })
 
-    // PHASE 2: Letter A SLAMS down (0.5s)
-    timeline.call(() => {
-      setLetterStates(prev => {
-        const next = [...prev]
-        next[0].visible = true
-        return next
-      })
-      
-      // Lightning flash
-      setLightningFlash(1)
-      setTimeout(() => setLightningFlash(0), 80)
-      
-      // Camera shake
-      gsap.to(cameraShake.current, {
-        x: Math.random() * 0.5 - 0.25,
-        y: Math.random() * 0.5 - 0.25,
-        z: Math.random() * 0.3 - 0.15,
-        duration: 0.1,
-        onComplete: () => {
-          gsap.to(cameraShake.current, { x: 0, y: 0, z: 0, duration: 0.3 })
-        }
-      })
-      
-      // Letter slam animation
-      gsap.to(letterStates[0], {
-        y: 0,
-        duration: 0.4,
-        ease: 'power4.in',
-        onUpdate: () => {
-          setLetterStates(prev => {
-            const next = [...prev]
-            next[0].y = letterStates[0].y
-            return next
-          })
-        },
-        onComplete: () => {
-          setLetterStates(prev => {
-            const next = [...prev]
-            next[0].landed = true
-            return next
-          })
-          // Particle explosion
-          createParticleExplosion(-6, 0, 0)
-        }
-      })
-    }, [], 0.5)
+    // Camera: Slow dolly forward
+    timeline.to(camera.position, {
+      z: targetCameraPos.current.z,
+      duration: 2.5,
+      ease: 'power2.inOut'
+    }, 0)
 
-    // PHASE 3: Letter U SLAMS down (1.0s)
-    timeline.call(() => {
-      setLetterStates(prev => {
-        const next = [...prev]
-        next[1].visible = true
-        return next
-      })
-      
-      setLightningFlash(1)
-      setTimeout(() => setLightningFlash(0), 80)
-      
-      gsap.to(cameraShake.current, {
-        x: Math.random() * 0.4 - 0.2,
-        y: Math.random() * 0.4 - 0.2,
-        z: Math.random() * 0.2 - 0.1,
-        duration: 0.1,
-        onComplete: () => {
-          gsap.to(cameraShake.current, { x: 0, y: 0, z: 0, duration: 0.3 })
-        }
-      })
-      
-      gsap.to(letterStates[1], {
-        y: 0,
-        duration: 0.4,
-        ease: 'power4.in',
-        onUpdate: () => {
-          setLetterStates(prev => {
-            const next = [...prev]
-            next[1].y = letterStates[1].y
-            return next
-          })
-        },
-        onComplete: () => {
-          setLetterStates(prev => {
-            const next = [...prev]
-            next[1].landed = true
-            return next
-          })
-          createParticleExplosion(-2, 0, 0)
-        }
-      })
-    }, [], 1.0)
+    // PHASE 2: Logo Reveal (0.8 - 1.8s)
+    // Text fades in with subtle scale animation
+    timeline.to({ opacity: 0, scale: 0.95 }, {
+      opacity: 1,
+      scale: 1.0,
+      duration: 1.0,
+      ease: 'expo.out',
+      onUpdate: function() {
+        const target = this.targets()[0]
+        setTextOpacity(target.opacity)
+        setTextScale(target.scale)
+      }
+    }, 0.8)
 
-    // PHASE 4: Letter R SLAMS down (1.5s)
-    timeline.call(() => {
-      setLetterStates(prev => {
-        const next = [...prev]
-        next[2].visible = true
-        return next
-      })
-      
-      setLightningFlash(1)
-      setTimeout(() => setLightningFlash(0), 80)
-      
-      gsap.to(cameraShake.current, {
-        x: Math.random() * 0.4 - 0.2,
-        y: Math.random() * 0.4 - 0.2,
-        z: Math.random() * 0.2 - 0.1,
-        duration: 0.1,
-        onComplete: () => {
-          gsap.to(cameraShake.current, { x: 0, y: 0, z: 0, duration: 0.3 })
-        }
-      })
-      
-      gsap.to(letterStates[2], {
-        y: 0,
-        duration: 0.4,
-        ease: 'power4.in',
-        onUpdate: () => {
-          setLetterStates(prev => {
-            const next = [...prev]
-            next[2].y = letterStates[2].y
-            return next
-          })
-        },
-        onComplete: () => {
-          setLetterStates(prev => {
-            const next = [...prev]
-            next[2].landed = true
-            return next
-          })
-          createParticleExplosion(2, 0, 0)
-        }
-      })
-    }, [], 1.5)
+    // Glow intensity builds up
+    timeline.to({ glow: 0 }, {
+      glow: 1,
+      duration: 1.0,
+      ease: 'power2.out',
+      onUpdate: function() {
+        setGlowIntensity(this.targets()[0].glow)
+      }
+    }, 0.8)
 
-    // PHASE 5: Letter A SLAMS down (2.0s)
-    timeline.call(() => {
-      setLetterStates(prev => {
-        const next = [...prev]
-        next[3].visible = true
-        return next
-      })
-      
-      setLightningFlash(1.5) // Bigger flash for final letter
-      setTimeout(() => setLightningFlash(0), 120)
-      
-      gsap.to(cameraShake.current, {
-        x: Math.random() * 0.6 - 0.3,
-        y: Math.random() * 0.6 - 0.3,
-        z: Math.random() * 0.3 - 0.15,
-        duration: 0.15,
-        onComplete: () => {
-          gsap.to(cameraShake.current, { x: 0, y: 0, z: 0, duration: 0.4 })
-        }
-      })
-      
-      gsap.to(letterStates[3], {
-        y: 0,
-        duration: 0.4,
-        ease: 'power4.in',
-        onUpdate: () => {
-          setLetterStates(prev => {
-            const next = [...prev]
-            next[3].y = letterStates[3].y
-            return next
-          })
-        },
-        onComplete: () => {
-          setLetterStates(prev => {
-            const next = [...prev]
-            next[3].landed = true
-            return next
-          })
-          createParticleExplosion(6, 0, 0)
-        }
-      })
-    }, [], 2.0)
-
-    // PHASE 6: Final dramatic pause and fade (2.5-3.5s)
-    timeline.to({}, { duration: 1.5 })
+    // PHASE 3: Hold & Transition (1.8 - 2.5s)
+    // Hold for a moment, then gentle fade
+    timeline.to({}, { duration: 0.4 }, 1.8)
+    
+    // Gentle fade out
+    timeline.to({ opacity: 1 }, {
+      opacity: 0,
+      duration: 0.3,
+      ease: 'power2.in',
+      onUpdate: function() {
+        setTextOpacity(this.targets()[0].opacity)
+      }
+    }, 2.2)
 
     return () => {
       if (timelineRef.current) {
@@ -240,48 +140,27 @@ export default function IntroSequence() {
     }
   }, [assetsLoaded, introComplete, camera, setIntroComplete])
 
-  // Create particle explosion effect
-  const createParticleExplosion = (x: number, y: number, z: number) => {
-    const newParticles = []
-    for (let i = 0; i < 30; i++) {
-      const angle = (Math.PI * 2 * i) / 30
-      const speed = 2 + Math.random() * 3
-      newParticles.push({
-        id: particleIdCounter.current++,
-        x,
-        y,
-        z,
-        vx: Math.cos(angle) * speed,
-        vy: Math.random() * 4 + 2,
-        vz: Math.sin(angle) * speed,
-      })
-    }
-    setParticles(prev => [...prev, ...newParticles])
-  }
-
-  // Animate particles
+  // Animate ambient particles
   useFrame((state, delta) => {
-    if (!introComplete) {
-      // Apply camera shake
-      camera.position.copy(baseCameraPos.current).add(cameraShake.current)
-      camera.lookAt(0, 0, 0)
-    }
+    if (introComplete) return
 
-    // Update particles
-    setParticles(prev => 
-      prev
-        .map(p => ({
+    // Gentle particle float
+    setParticles(prev =>
+      prev.map(p => {
+        const newY = p.y + p.vy * delta
+        return {
           ...p,
           x: p.x + p.vx * delta,
-          y: p.y + p.vy * delta,
-          z: p.z + p.vz * delta,
-          vy: p.vy - 9.8 * delta, // Gravity
-        }))
-        .filter(p => p.y > -5) // Remove particles that fall too far
+          y: newY > 15 ? -2 : newY
+        }
+      })
     )
+
+    // Ensure camera looks at center
+    camera.lookAt(0, 0, 0)
   })
 
-  // Skip intro on user interaction
+  // Allow skip with Enter or Space
   useEffect(() => {
     const handleSkip = (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -300,97 +179,107 @@ export default function IntroSequence() {
 
   return (
     <>
-      {/* Lightning flash effect */}
-      {lightningFlash > 0 && (
-        <pointLight
-          position={[0, 10, 5]}
-          intensity={lightningFlash * 50}
-          color="#ffffff"
-          distance={100}
+      {/* Fade from black overlay */}
+      <mesh position={[0, 0, -5]}>
+        <planeGeometry args={[200, 200]} />
+        <meshBasicMaterial
+          color="#000000"
+          transparent
+          opacity={1 - fadeIn}
+          depthWrite={false}
         />
-      )}
-      
-      {/* Dark moody ambient */}
-      <ambientLight intensity={0.05} />
-      
-      {/* Background lightning flashes */}
-      {lightningFlash > 0 && (
-        <>
-          <mesh position={[0, 0, -20]}>
-            <planeGeometry args={[100, 100]} />
-            <meshBasicMaterial
-              color="#ffffff"
-              transparent
-              opacity={lightningFlash * 0.3}
-            />
-          </mesh>
-        </>
-      )}
+      </mesh>
 
-      {/* AURA Letters */}
-      {letterStates.map((state, i) => {
-        if (!state.visible) return null
-        
-        const xPos = -6 + i * 4
-        
-        return (
-          <group key={i} position={[xPos, state.y, 0]}>
-            <Text
-              fontSize={3}
-              color="#00e5ff"
-              anchorX="center"
-              anchorY="middle"
-            >
-              {state.letter}
-            </Text>
-            
-            {/* Glow effect */}
-            <pointLight
-              position={[0, 0, 2]}
-              intensity={state.landed ? 5 : 10}
-              color="#00e5ff"
-              distance={10}
-            />
-            
-            {/* Impact ring when landed */}
-            {state.landed && (
-              <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.5, 0]}>
-                <ringGeometry args={[0.5, 3, 32]} />
-                <meshBasicMaterial
-                  color="#00e5ff"
-                  transparent
-                  opacity={0.5}
-                  side={THREE.DoubleSide}
-                />
-              </mesh>
-            )}
-          </group>
-        )
-      })}
+      {/* Soft ambient lighting */}
+      <ambientLight intensity={0.15 * fadeIn} color="#4a90e2" />
+      
+      {/* Subtle directional light */}
+      <directionalLight
+        position={[5, 10, 5]}
+        intensity={0.3 * fadeIn}
+        color="#ffffff"
+      />
 
-      {/* Particle explosions */}
+      {/* AURA Text - Elegant reveal */}
+      <group position={[0, 0, 0]} scale={textScale}>
+        <Text
+          fontSize={3.5}
+          color="#00e5ff"
+          anchorX="center"
+          anchorY="middle"
+          letterSpacing={0.1}
+        >
+          AURA
+        </Text>
+        
+        {/* Subtle glow around text */}
+        <pointLight
+          position={[0, 0, 2]}
+          intensity={glowIntensity * 8}
+          color="#00e5ff"
+          distance={15}
+          decay={2}
+        />
+        
+        {/* Soft rim light */}
+        <pointLight
+          position={[0, 0, -3]}
+          intensity={glowIntensity * 3}
+          color="#0088cc"
+          distance={10}
+          decay={2}
+        />
+      </group>
+
+      {/* Text opacity control */}
+      <mesh position={[0, 0, 0.1]}>
+        <planeGeometry args={[20, 10]} />
+        <meshBasicMaterial
+          color="#000000"
+          transparent
+          opacity={(1 - textOpacity) * fadeIn}
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* Ambient particles - subtle atmosphere */}
       {particles.map(p => (
         <mesh key={p.id} position={[p.x, p.y, p.z]}>
-          <sphereGeometry args={[0.1, 8, 8]} />
+          <sphereGeometry args={[0.08, 6, 6]} />
           <meshBasicMaterial
             color="#00e5ff"
             transparent
-            opacity={0.8}
+            opacity={p.opacity * fadeIn * 0.6}
           />
         </mesh>
       ))}
 
-      {/* Atmospheric fog */}
-      <mesh position={[0, -2, -10]}>
-        <planeGeometry args={[50, 50]} />
+      {/* Subtle atmospheric fog */}
+      <mesh position={[0, -3, -15]} rotation={[-Math.PI / 6, 0, 0]}>
+        <planeGeometry args={[60, 40]} />
         <meshBasicMaterial
-          color="#000510"
+          color="#001a33"
           transparent
-          opacity={0.8}
+          opacity={0.4 * fadeIn}
         />
       </mesh>
+
+      {/* Skip hint - subtle */}
+      {fadeIn > 0.5 && (
+        <group position={[0, -6, 0]}>
+          <Text
+            fontSize={0.4}
+            color="#ffffff"
+            anchorX="center"
+            anchorY="middle"
+            fillOpacity={0.3 * fadeIn}
+          >
+            Press SPACE or ENTER to skip
+          </Text>
+        </group>
+      )}
     </>
   )
 }
 
-// Made with Bob
+// Made with Bob - Elegant Intro Redesign

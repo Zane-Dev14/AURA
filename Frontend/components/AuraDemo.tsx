@@ -1,20 +1,22 @@
 'use client'
 import { Canvas } from '@react-three/fiber'
 import { Environment, PerformanceMonitor, Preload, Stars } from '@react-three/drei'
-import { Suspense, useState, useEffect, useRef } from 'react'
+import { Suspense, useState, useEffect, useRef, lazy } from 'react'
 import { EffectComposer, Bloom, ChromaticAberration, Vignette } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
 import * as THREE from 'three'
 import { useSceneStore } from '@/store/useSceneStore'
-import SceneManager from './SceneManager'
-import SceneHUD from './ui/SceneHUD'
 import LoadingGate from './LoadingGate'
 import FilmGrainOverlay from './ui/FilmGrainOverlay'
 import InteractionHints from './ui/InteractionHints'
 import { unlockAudio } from '@/lib/sound'
-import LightingRig from './r3f/LightingRig'
-import SceneTransitionManager from './r3f/SceneTransitionManager'
-import IntroSequence from './r3f/IntroSequence'
+
+// Lazy load heavy components for better initial performance
+const SceneManager = lazy(() => import('./SceneManager'))
+const SceneHUD = lazy(() => import('./ui/SceneHUD'))
+const LightingRig = lazy(() => import('./r3f/LightingRig'))
+const SceneTransitionManager = lazy(() => import('./r3f/SceneTransitionManager'))
+const IntroSequence = lazy(() => import('./r3f/IntroSequence'))
 
 // Fog presets per scene for atmospheric depth
 const fogPresets: Record<string, { color: string; density: number }> = {
@@ -95,19 +97,33 @@ export default function AuraDemo() {
           antialias: true,
           powerPreference: 'high-performance',
           toneMappingExposure: 1.2,
-          toneMapping: THREE.ACESFilmicToneMapping
+          toneMapping: THREE.ACESFilmicToneMapping,
+          // Performance optimizations
+          alpha: false,
+          stencil: false,
+          depth: true,
         }}
         shadows="soft"
         camera={{ position: [0, 8, 20], fov: 55, near: 0.1, far: 200 }}
         style={{ background: '#000' }}
+        frameloop="always" // Ensure smooth rendering
       >
         <FogController />
         <color attach="background" args={['#000205']} />
+        
+        {/* Performance monitoring with adaptive quality */}
         <PerformanceMonitor
           onDecline={() => setDpr(1)}
           onIncline={() => setDpr(1.5)}
+          flipflops={3}
+          factor={0.5}
         />
+        
+        {/* Suspense with proper fallback for smooth loading */}
         <Suspense fallback={null}>
+          {/* Preload all assets FIRST for smooth intro transition */}
+          <Preload all />
+          
           <LightingRig />
           <Environment
             files={
@@ -120,13 +136,17 @@ export default function AuraDemo() {
             backgroundIntensity={0.3}
             environmentIntensity={2.0}
           />
-          <Stars radius={100} depth={80} count={5000} factor={4} fade speed={0.3} />
+          
+          {/* Optimized star count for better performance */}
+          <Stars radius={100} depth={80} count={3000} factor={4} fade speed={0.3} />
+          
           <IntroSequence />
           <SceneManager />
           <SceneTransitionManager />
-          <Preload all />
         </Suspense>
-        <EffectComposer multisampling={8}>
+        
+        {/* Post-processing with optimized settings */}
+        <EffectComposer multisampling={4}>
           <Bloom
             intensity={bloomIntensity * 0.4}
             luminanceThreshold={0.7}
@@ -145,8 +165,14 @@ export default function AuraDemo() {
           />
         </EffectComposer>
       </Canvas>
+      
       <LoadingGate />
-      <SceneHUD />
+      
+      {/* Lazy load UI components */}
+      <Suspense fallback={null}>
+        <SceneHUD />
+      </Suspense>
+      
       <FilmGrainOverlay />
       <InteractionHints />
     </div>

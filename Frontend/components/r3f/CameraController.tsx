@@ -1,11 +1,11 @@
 'use client'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import { useSceneStore, Scene } from '@/store/useSceneStore'
 import * as THREE from 'three'
 import gsap from 'gsap'
 
-type CameraMode = 'cinematic' | 'follow' | 'fixed' | 'orbit'
+type CameraMode = 'cinematic' | 'follow' | 'fixed' | 'orbit' | 'mouse-orbit'
 
 interface CameraPreset {
   position: [number, number, number]
@@ -79,8 +79,9 @@ const cameraPresets: Record<Scene, CameraPreset> = {
 }
 
 export default function CameraController() {
-  const { camera, scene: threeScene } = useThree()
+  const { camera, scene: threeScene, pointer } = useThree()
   const scene = useSceneStore((state) => state.scene)
+  const introComplete = useSceneStore((state) => state.introComplete)
   
   // Refs for smooth camera control
   const currentMode = useRef<CameraMode>('cinematic')
@@ -92,6 +93,13 @@ export default function CameraController() {
   const tweenRef = useRef<gsap.core.Tween | null>(null)
   const fovTweenRef = useRef<gsap.core.Tween | null>(null)
   
+  // Mouse drag rotation control
+  const [isDragging, setIsDragging] = useState(false)
+  const dragAngles = useRef({ horizontal: 0, vertical: 0 })
+  const defaultAngles = useRef({ horizontal: Math.PI, vertical: 0 }) // Behind airship
+  const lastMousePos = useRef({ x: 0, y: 0 })
+  const orbitDistance = useRef(20)
+  
   // Airship reference for follow mode
   const airshipPosition = useRef(new THREE.Vector3(0, 2, 0))
   
@@ -100,6 +108,62 @@ export default function CameraController() {
     const preset = cameraPresets[scene]
     currentLookAt.current.set(...preset.lookAt)
   }, [])
+
+  // Mouse drag handlers for camera rotation
+  useEffect(() => {
+    if (!introComplete) return
+
+    const handlePointerDown = (e: PointerEvent) => {
+      // Right-click or left-click to drag
+      if (e.button === 0 || e.button === 2) {
+        setIsDragging(true)
+        lastMousePos.current = { x: e.clientX, y: e.clientY }
+        e.preventDefault()
+      }
+    }
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!isDragging) return
+
+      const deltaX = e.clientX - lastMousePos.current.x
+      const deltaY = e.clientY - lastMousePos.current.y
+      
+      lastMousePos.current = { x: e.clientX, y: e.clientY }
+
+      // Update drag angles based on mouse movement
+      // Horizontal: full 360° rotation (sensitivity: 0.005)
+      dragAngles.current.horizontal -= deltaX * 0.005
+      
+      // Vertical: limited to -45° to 45° (prevent flipping)
+      const verticalRange = Math.PI / 4 // 45 degrees
+      dragAngles.current.vertical = THREE.MathUtils.clamp(
+        dragAngles.current.vertical + deltaY * 0.005,
+        -verticalRange,
+        verticalRange
+      )
+    }
+
+    const handlePointerUp = () => {
+      setIsDragging(false)
+    }
+
+    // Prevent context menu on right-click
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault()
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('contextmenu', handleContextMenu)
+
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('contextmenu', handleContextMenu)
+    }
+  }, [introComplete, isDragging])
   
   // Handle scene changes with smooth GSAP transitions
   useEffect(() => {
@@ -173,6 +237,37 @@ export default function CameraController() {
   useFrame((state, delta) => {
     const preset = cameraPresets[scene]
     
+    // Third-person camera with drag rotation (for follow mode after intro)
+    if (currentMode.current === 'follow' && introComplete) {
+      // Calculate camera position using spherical coordinates around airship
+      const horizontalAngle = dragAngles.current.horizontal
+      const verticalAngle = dragAngles.current.vertical
+      
+      // Distance from airship
+      const distance = 12
+      
+      // Convert spherical to cartesian coordinates
+      const offsetX = distance * Math.cos(verticalAngle) * Math.sin(horizontalAngle)
+      const offsetY = 3 + distance * Math.sin(verticalAngle)
+      const offsetZ = distance * Math.cos(verticalAngle) * Math.cos(horizontalAngle)
+      
+      // Position camera relative to airship (follows airship movement)
+      const targetPos = new THREE.Vector3(
+        airshipPosition.current.x + offsetX,
+        airshipPosition.current.y + offsetY,
+        airshipPosition.current.z + offsetZ
+      )
+      
+      // Smooth camera movement - follows airship
+      camera.position.lerp(targetPos, 0.1)
+      
+      // Look at airship (slightly above center)
+      const lookTarget = airshipPosition.current.clone().add(new THREE.Vector3(0, 1, 0))
+      camera.lookAt(lookTarget)
+      camera.updateMatrixWorld()
+      return
+    }
+    
     // Camera shake for dramatic scenes
     if (preset.shake) {
       const shakeIntensity = scene === 'failure' ? 0.08 : 0.05
@@ -187,17 +282,10 @@ export default function CameraController() {
       shakeOffset.current.lerp(new THREE.Vector3(0, 0, 0), 0.1)
     }
     
-    // Mode-specific camera behavior
+    // Mode-specific camera behavior (skip follow mode as it's handled above)
     switch (currentMode.current) {
       case 'follow': {
-        // Smooth follow with damping
-        const cameraOffset = new THREE.Vector3(0, 3, 8)
-        const targetPos = airshipPosition.current.clone().add(cameraOffset)
-        
-        camera.position.lerp(targetPos, 0.05)
-        
-        const lookTarget = airshipPosition.current.clone().add(new THREE.Vector3(0, 1, 0))
-        currentLookAt.current.lerp(lookTarget, 0.08)
+        // Handled above with drag rotation support
         break
       }
       

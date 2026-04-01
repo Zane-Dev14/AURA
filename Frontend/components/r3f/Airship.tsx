@@ -281,29 +281,23 @@ export default function Airship() {
       }
     }
 
-    // Mouse tilt for non-controllable states
+    // Natural drift for non-controllable states (NO MOUSE CONTROL)
     if (innerGroupRef.current && !isControllable) {
       const ig = innerGroupRef.current
       
-      // Mouse influence with smooth interpolation
-      const mouseInfluence = 1
-      const targetTiltZ = -pointer.x * 0.25 * mouseInfluence
-      const targetTiltX = pointer.y * 0.15 * mouseInfluence
-      
-      // Natural drift
+      // Only natural drift - no mouse influence
       const naturalDriftY = Math.sin(t * 0.5) * 0.03
       const naturalDriftX = Math.cos(t * 0.7) * 0.02
+      const naturalDriftZ = Math.sin(t * 0.3) * 0.02
 
-      // Smooth interpolation with inertia
-      ig.rotation.z = THREE.MathUtils.lerp(ig.rotation.z, targetTiltZ + naturalDriftX, 0.08)
-      ig.rotation.x = THREE.MathUtils.lerp(ig.rotation.x, targetTiltX, 0.08)
+      // Smooth natural drift only
+      ig.rotation.z = THREE.MathUtils.lerp(ig.rotation.z, naturalDriftZ, 0.05)
+      ig.rotation.x = THREE.MathUtils.lerp(ig.rotation.x, 0, 0.05)
       ig.rotation.y = THREE.MathUtils.lerp(ig.rotation.y, naturalDriftY, 0.05)
 
-      // Subtle position offset based on mouse (parallax within ship)
-      const targetOffsetX = pointer.x * 0.3 * mouseInfluence
-      const targetOffsetY = pointer.y * 0.15 * mouseInfluence
-      ig.position.x = THREE.MathUtils.lerp(ig.position.x, targetOffsetX, 0.06)
-      ig.position.y = THREE.MathUtils.lerp(ig.position.y, targetOffsetY, 0.06)
+      // Reset position offsets
+      ig.position.x = THREE.MathUtils.lerp(ig.position.x, 0, 0.06)
+      ig.position.y = THREE.MathUtils.lerp(ig.position.y, 0, 0.06)
     }
   })
 

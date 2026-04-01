@@ -5,8 +5,8 @@ import * as THREE from 'three'
 
 /**
  * AtmosphericParticles - Floating dust particles for depth
- * 
- * Creates 1000 particles that:
+ *
+ * Creates 500 particles (optimized for performance) that:
  * - Float organically through the scene
  * - Fade with distance (depth-based opacity)
  * - Add subtle glow
@@ -17,7 +17,7 @@ export default function AtmosphericParticles() {
   
   // Generate particle positions and properties
   const particleData = useMemo(() => {
-    const count = 1000
+    const count = 500 // Reduced from 1000 for better performance
     const positions = new Float32Array(count * 3)
     const velocities = new Float32Array(count * 3)
     const sizes = new Float32Array(count)
