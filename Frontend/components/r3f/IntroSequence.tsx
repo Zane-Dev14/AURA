@@ -7,131 +7,101 @@ import gsap from 'gsap'
 import * as THREE from 'three'
 
 /**
- * IntroSequence - ELEGANT REVEAL
- *
- * Professional, smooth intro inspired by Lusion, Aristide Benoist, and Active Theory
- * - 2.5 seconds total duration
- * - Smooth fade-in with gentle camera movement
- * - Elegant typography with subtle animations
- * - Ambient particles for atmosphere
- * - No aggressive effects (no flash, shake, or slam)
+ * IntroSequence - CINEMATIC REVEAL
+ * Award-winning style intro with dramatic camera work and particle effects
  */
 export default function IntroSequence() {
-  const { camera, scene } = useThree()
+  const { camera } = useThree()
   const { introComplete, setIntroComplete, assetsLoaded } = useSceneStore()
   const timelineRef = useRef<gsap.core.Timeline | null>(null)
   
-  // Animation states
-  const [fadeIn, setFadeIn] = useState(0) // Overall fade from black
   const [textOpacity, setTextOpacity] = useState(0)
-  const [textScale, setTextScale] = useState(0.95)
+  const [textScale, setTextScale] = useState(0.5)
   const [glowIntensity, setGlowIntensity] = useState(0)
+  const [ringsOpacity, setRingsOpacity] = useState(0)
+  const [particleIntensity, setParticleIntensity] = useState(0)
   
-  // Ambient particles for atmosphere
-  const [particles, setParticles] = useState<Array<{
-    id: number
-    x: number
-    y: number
-    z: number
-    vx: number
-    vy: number
-    opacity: number
-  }>>([])
+  // Cinematic particles
+  const particlesRef = useRef<THREE.Points>(null)
+  const particleCount = 2000
   
-  const baseCameraPos = useRef(new THREE.Vector3(0, 5, 16))
-  const targetCameraPos = useRef(new THREE.Vector3(0, 5, 15))
-
-  // Initialize ambient particles
   useEffect(() => {
     if (!assetsLoaded || introComplete) return
 
-    // Create subtle ambient particles
-    const ambientParticles = []
-    for (let i = 0; i < 80; i++) {
-      ambientParticles.push({
-        id: i,
-        x: (Math.random() - 0.5) * 30,
-        y: Math.random() * 15 - 2,
-        z: (Math.random() - 0.5) * 20 - 5,
-        vx: (Math.random() - 0.5) * 0.3,
-        vy: Math.random() * 0.2 + 0.1,
-        opacity: Math.random() * 0.4 + 0.1
-      })
-    }
-    setParticles(ambientParticles)
-  }, [assetsLoaded, introComplete])
-
-  useEffect(() => {
-    if (!assetsLoaded || introComplete) return
-
-    // Set camera to starting position
-    camera.position.copy(baseCameraPos.current)
+    // Set dramatic camera start position
+    camera.position.set(0, 10, 30)
     camera.lookAt(0, 0, 0)
 
-    // Create elegant timeline - 2.5 seconds total
+    // Create cinematic timeline - 2.5 seconds
     const timeline = gsap.timeline({
       onComplete: () => {
-        setTimeout(() => setIntroComplete(true), 200)
+        setTimeout(() => setIntroComplete(true), 100)
       }
     })
 
     timelineRef.current = timeline
 
-    // PHASE 1: Fade In (0.0 - 0.8s)
-    // Gentle fade from black with camera dolly
-    timeline.to({ value: 0 }, {
-      value: 1,
-      duration: 0.8,
-      ease: 'power2.out',
-      onUpdate: function() {
-        setFadeIn(this.targets()[0].value)
-      }
-    })
-
-    // Camera: Slow dolly forward
+    // Camera: Dramatic dolly in
     timeline.to(camera.position, {
-      z: targetCameraPos.current.z,
+      z: 15,
+      y: 5,
       duration: 2.5,
       ease: 'power2.inOut'
     }, 0)
 
-    // PHASE 2: Logo Reveal (0.8 - 1.8s)
-    // Text fades in with subtle scale animation
-    timeline.to({ opacity: 0, scale: 0.95 }, {
+    // Text: Scale up with elastic bounce
+    timeline.to({ scale: 0.5, opacity: 0 }, {
+      scale: 1,
       opacity: 1,
-      scale: 1.0,
-      duration: 1.0,
-      ease: 'expo.out',
+      duration: 1.2,
+      ease: 'elastic.out(1, 0.6)',
       onUpdate: function() {
         const target = this.targets()[0]
-        setTextOpacity(target.opacity)
         setTextScale(target.scale)
+        setTextOpacity(target.opacity)
       }
-    }, 0.8)
+    }, 0.3)
 
-    // Glow intensity builds up
+    // Glow: Intense build-up
     timeline.to({ glow: 0 }, {
       glow: 1,
-      duration: 1.0,
-      ease: 'power2.out',
+      duration: 1.5,
+      ease: 'power3.out',
       onUpdate: function() {
         setGlowIntensity(this.targets()[0].glow)
       }
+    }, 0.5)
+
+    // Rings: Expand outward
+    timeline.to({ rings: 0 }, {
+      rings: 1,
+      duration: 1.0,
+      ease: 'power2.out',
+      onUpdate: function() {
+        setRingsOpacity(this.targets()[0].rings)
+      }
     }, 0.8)
 
-    // PHASE 3: Hold & Transition (1.8 - 2.5s)
-    // Hold for a moment, then gentle fade
-    timeline.to({}, { duration: 0.4 }, 1.8)
-    
-    // Gentle fade out
+    // Particles: Burst effect
+    timeline.to({ particles: 0 }, {
+      particles: 1,
+      duration: 1.2,
+      ease: 'power2.out',
+      onUpdate: function() {
+        setParticleIntensity(this.targets()[0].particles)
+      }
+    }, 0.6)
+
+    // Fade out
     timeline.to({ opacity: 1 }, {
       opacity: 0,
-      duration: 0.3,
+      duration: 0.4,
       ease: 'power2.in',
       onUpdate: function() {
         setTextOpacity(this.targets()[0].opacity)
+        setRingsOpacity(this.targets()[0].opacity * 0.5)
       }
-    }, 2.2)
+    }, 2.1)
 
     return () => {
       if (timelineRef.current) {
@@ -140,146 +110,142 @@ export default function IntroSequence() {
     }
   }, [assetsLoaded, introComplete, camera, setIntroComplete])
 
-  // Animate ambient particles
-  useFrame((state, delta) => {
-    if (introComplete) return
-
-    // Gentle particle float
-    setParticles(prev =>
-      prev.map(p => {
-        const newY = p.y + p.vy * delta
-        return {
-          ...p,
-          x: p.x + p.vx * delta,
-          y: newY > 15 ? -2 : newY
-        }
-      })
-    )
-
-    // Ensure camera looks at center
-    camera.lookAt(0, 0, 0)
+  // Animate particles
+  useFrame((state) => {
+    if (introComplete || !particlesRef.current) return
+    
+    const positions = particlesRef.current.geometry.attributes.position.array as Float32Array
+    const time = state.clock.elapsedTime
+    
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3
+      const x = positions[i3]
+      const z = positions[i3 + 2]
+      
+      // Spiral outward motion
+      positions[i3 + 1] += Math.sin(time + i * 0.1) * 0.02
+    }
+    
+    particlesRef.current.geometry.attributes.position.needsUpdate = true
+    particlesRef.current.rotation.y = time * 0.1
   })
 
-  // Allow skip with Enter or Space
+  // Skip handler
   useEffect(() => {
     const handleSkip = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        if (!introComplete && timelineRef.current) {
-          timelineRef.current.progress(1)
-          setIntroComplete(true)
-        }
+      if ((e.key === 'Enter' || e.key === ' ') && !introComplete && timelineRef.current) {
+        timelineRef.current.progress(1)
+        setIntroComplete(true)
       }
     }
-
     window.addEventListener('keydown', handleSkip)
     return () => window.removeEventListener('keydown', handleSkip)
   }, [introComplete, setIntroComplete])
 
   if (introComplete) return null
 
+  // Generate particle positions
+  const particlePositions = new Float32Array(particleCount * 3)
+  for (let i = 0; i < particleCount; i++) {
+    const i3 = i * 3
+    const radius = 5 + Math.random() * 15
+    const theta = Math.random() * Math.PI * 2
+    const phi = Math.random() * Math.PI
+    
+    particlePositions[i3] = radius * Math.sin(phi) * Math.cos(theta)
+    particlePositions[i3 + 1] = (Math.random() - 0.5) * 10
+    particlePositions[i3 + 2] = radius * Math.sin(phi) * Math.sin(theta)
+  }
+
   return (
     <>
-      {/* Fade from black overlay */}
-      <mesh position={[0, 0, -5]}>
-        <planeGeometry args={[200, 200]} />
-        <meshBasicMaterial
-          color="#000000"
-          transparent
-          opacity={1 - fadeIn}
-          depthWrite={false}
-        />
-      </mesh>
-
-      {/* Soft ambient lighting */}
-      <ambientLight intensity={0.15 * fadeIn} color="#4a90e2" />
-      
-      {/* Subtle directional light */}
-      <directionalLight
-        position={[5, 10, 5]}
-        intensity={0.3 * fadeIn}
-        color="#ffffff"
+      {/* Dramatic lighting */}
+      <ambientLight intensity={0.1} color="#0a1428" />
+      <pointLight position={[0, 0, 0]} intensity={glowIntensity * 15} color="#00e5ff" distance={50} />
+      <spotLight
+        position={[0, 20, 0]}
+        angle={0.5}
+        penumbra={0.5}
+        intensity={glowIntensity * 8}
+        color="#00d4ff"
+        target-position={[0, 0, 0]}
       />
 
-      {/* AURA Text - Elegant reveal */}
-      <group position={[0, 0, 0]} scale={textScale}>
+      {/* Main AURA text */}
+      <group scale={textScale}>
         <Text
-          fontSize={3.5}
-          color="#00e5ff"
+          fontSize={4}
+          color="#ffffff"
           anchorX="center"
           anchorY="middle"
-          letterSpacing={0.1}
+          letterSpacing={0.15}
+          fillOpacity={textOpacity}
+          outlineWidth={0.02}
+          outlineColor="#00e5ff"
+          outlineOpacity={textOpacity * 0.8}
         >
           AURA
         </Text>
         
-        {/* Subtle glow around text */}
+        {/* Intense glow */}
         <pointLight
           position={[0, 0, 2]}
-          intensity={glowIntensity * 8}
+          intensity={glowIntensity * 20}
           color="#00e5ff"
-          distance={15}
-          decay={2}
-        />
-        
-        {/* Soft rim light */}
-        <pointLight
-          position={[0, 0, -3]}
-          intensity={glowIntensity * 3}
-          color="#0088cc"
-          distance={10}
+          distance={30}
           decay={2}
         />
       </group>
 
-      {/* Text opacity control */}
-      <mesh position={[0, 0, 0.1]}>
-        <planeGeometry args={[20, 10]} />
-        <meshBasicMaterial
-          color="#000000"
-          transparent
-          opacity={(1 - textOpacity) * fadeIn}
-          depthWrite={false}
-        />
-      </mesh>
-
-      {/* Ambient particles - subtle atmosphere */}
-      {particles.map(p => (
-        <mesh key={p.id} position={[p.x, p.y, p.z]}>
-          <sphereGeometry args={[0.08, 6, 6]} />
+      {/* Expanding energy rings */}
+      {[1, 2, 3].map((ring, i) => (
+        <mesh
+          key={i}
+          position={[0, 0, 0]}
+          rotation={[Math.PI / 2, 0, 0]}
+          scale={ringsOpacity * (1 + i * 0.5)}
+        >
+          <ringGeometry args={[3 + i * 2, 3.2 + i * 2, 64]} />
           <meshBasicMaterial
             color="#00e5ff"
             transparent
-            opacity={p.opacity * fadeIn * 0.6}
+            opacity={ringsOpacity * (0.4 - i * 0.1)}
+            side={THREE.DoubleSide}
+            blending={THREE.AdditiveBlending}
           />
         </mesh>
       ))}
 
-      {/* Subtle atmospheric fog */}
-      <mesh position={[0, -3, -15]} rotation={[-Math.PI / 6, 0, 0]}>
-        <planeGeometry args={[60, 40]} />
-        <meshBasicMaterial
-          color="#001a33"
+      {/* Particle burst */}
+      <points ref={particlesRef}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            count={particleCount}
+            array={particlePositions}
+            itemSize={3}
+          />
+        </bufferGeometry>
+        <pointsMaterial
+          size={0.08}
+          color="#00e5ff"
           transparent
-          opacity={0.4 * fadeIn}
+          opacity={particleIntensity * 0.6}
+          blending={THREE.AdditiveBlending}
+          sizeAttenuation
+        />
+      </points>
+
+      {/* Atmospheric fog plane */}
+      <mesh position={[0, -5, -10]} rotation={[-Math.PI / 4, 0, 0]}>
+        <planeGeometry args={[80, 80]} />
+        <meshBasicMaterial
+          color="#001a3a"
+          transparent
+          opacity={0.2}
+          blending={THREE.AdditiveBlending}
         />
       </mesh>
-
-      {/* Skip hint - subtle */}
-      {fadeIn > 0.5 && (
-        <group position={[0, -6, 0]}>
-          <Text
-            fontSize={0.4}
-            color="#ffffff"
-            anchorX="center"
-            anchorY="middle"
-            fillOpacity={0.3 * fadeIn}
-          >
-            Press SPACE or ENTER to skip
-          </Text>
-        </group>
-      )}
     </>
   )
 }
-
-// Made with Bob - Elegant Intro Redesign

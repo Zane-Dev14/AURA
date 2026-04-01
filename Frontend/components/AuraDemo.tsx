@@ -9,6 +9,7 @@ import { useSceneStore } from '@/store/useSceneStore'
 import LoadingGate from './LoadingGate'
 import FilmGrainOverlay from './ui/FilmGrainOverlay'
 import InteractionHints from './ui/InteractionHints'
+import StoryText from './ui/StoryText'
 import { unlockAudio } from '@/lib/sound'
 
 // Lazy load heavy components for better initial performance
@@ -173,6 +174,7 @@ export default function AuraDemo() {
         <SceneHUD />
       </Suspense>
       
+      <StoryText />
       <FilmGrainOverlay />
       <InteractionHints />
     </div>

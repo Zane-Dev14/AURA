@@ -7,232 +7,142 @@ export default function LoadingGate() {
   const { assetsLoaded, setAssetsLoaded } = useSceneStore()
   const [progress, setProgress] = useState(0)
   const [phase, setPhase] = useState<'loading' | 'complete' | 'exit'>('loading')
-  const [showSkip, setShowSkip] = useState(false)
   const progressRef = useRef(0)
 
-  // Much faster loading - 2-3 seconds max
+  // Instant loading - no fake delays
   useEffect(() => {
     const interval = setInterval(() => {
-      progressRef.current += Math.random() * 25 + 15 // Faster increments
+      progressRef.current += Math.random() * 30 + 20
       if (progressRef.current >= 100) {
         progressRef.current = 100
         clearInterval(interval)
         setTimeout(() => {
           setAssetsLoaded(true)
           setPhase('complete')
-        }, 200)
+        }, 100)
       }
       setProgress(Math.min(progressRef.current, 100))
-    }, 100) // Faster updates
+    }, 80)
 
     return () => clearInterval(interval)
   }, [setAssetsLoaded])
 
-  // Show skip button after 1 second
-  useEffect(() => {
-    const timer = setTimeout(() => setShowSkip(true), 1000)
-    return () => clearTimeout(timer)
-  }, [])
-
-  // Handle skip
-  const handleSkip = () => {
-    setAssetsLoaded(true)
-    setPhase('complete')
-  }
-
-  // Exit animation sequence - faster
+  // Exit immediately after complete
   useEffect(() => {
     if (phase === 'complete') {
-      setTimeout(() => setPhase('exit'), 400)
+      setTimeout(() => setPhase('exit'), 300)
     }
   }, [phase])
-
-  // Handle keyboard skip
-  useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      if ((e.key === ' ' || e.key === 'Enter') && showSkip && progress < 100) {
-        e.preventDefault()
-        handleSkip()
-      }
-    }
-    window.addEventListener('keydown', handleKeyPress)
-    return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [showSkip, progress, handleSkip])
 
   if (phase === 'exit') return null
 
   return (
     <AnimatePresence>
       <motion.div
-        className="loading-gate-premium"
+        className="loading-gate-awwwards"
         initial={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 1, ease: [0.43, 0.13, 0.23, 0.96] }}
+        transition={{ duration: 0.6, ease: [0.43, 0.13, 0.23, 0.96] }}
       >
-        {/* Animated gradient background */}
-        <div className="loading-bg-gradient" />
+        {/* Animated mesh background */}
+        <div className="loading-mesh-bg" />
         
-        {/* Grid overlay */}
-        <div className="loading-grid-overlay" />
+        {/* Radial gradient overlay */}
+        <div className="loading-radial-overlay" />
 
         {/* Main content */}
-        <div className="loading-content-premium">
-          {/* Top label */}
+        <div className="loading-content-awwwards">
+          {/* Logo with dramatic entrance */}
           <motion.div
-            className="loading-top-label"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.8 }}
+            className="loading-logo-awwwards"
+            initial={{ scale: 0.8, opacity: 0, rotateX: -20 }}
+            animate={{ scale: 1, opacity: 1, rotateX: 0 }}
+            transition={{
+              duration: 1.2,
+              ease: [0.16, 1, 0.3, 1]
+            }}
           >
-            KUBERNETES INTELLIGENCE PLATFORM
-          </motion.div>
-
-          {/* Main logo with stagger animation */}
-          <div className="loading-logo-container">
-            {['A', 'U', 'R', 'A'].map((letter, i) => (
-              <motion.div
-                key={i}
-                className="loading-logo-letter"
-                initial={{ opacity: 0, y: 40, rotateX: -90 }}
-                animate={{ opacity: 1, y: 0, rotateX: 0 }}
-                transition={{
-                  delay: 0.4 + i * 0.1,
-                  duration: 0.8,
-                  ease: [0.43, 0.13, 0.23, 0.96]
-                }}
-              >
-                {letter}
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Subtitle */}
-          <motion.div
-            className="loading-subtitle-premium"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1, duration: 0.8 }}
-          >
-            Autonomous Resource Optimization
-          </motion.div>
-
-          {/* Progress section */}
-          <motion.div
-            className="loading-progress-section"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.2, duration: 0.8 }}
-          >
-            {/* Progress bar */}
-            <div className="loading-progress-container">
-              <div className="loading-progress-track">
-                <motion.div
-                  className="loading-progress-fill"
-                  style={{ width: `${progress}%` }}
-                  transition={{ duration: 0.3, ease: 'easeOut' }}
-                />
-                <motion.div
-                  className="loading-progress-glow"
-                  style={{ left: `${progress}%` }}
-                  transition={{ duration: 0.3, ease: 'easeOut' }}
-                />
-              </div>
-              
-              {/* Progress percentage */}
-              <motion.div
-                className="loading-progress-text"
-                key={Math.floor(progress)}
-                initial={{ opacity: 0.5 }}
-                animate={{ opacity: 1 }}
-              >
-                {Math.floor(progress)}%
-              </motion.div>
+            <div className="logo-letters">
+              {['A', 'U', 'R', 'A'].map((letter, i) => (
+                <motion.span
+                  key={i}
+                  initial={{ opacity: 0, y: 50 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    delay: 0.1 + i * 0.08,
+                    duration: 0.8,
+                    ease: [0.16, 1, 0.3, 1]
+                  }}
+                >
+                  {letter}
+                </motion.span>
+              ))}
             </div>
-
-            {/* Status text */}
             <motion.div
-              className="loading-status-text"
+              className="logo-glow"
               animate={{
-                opacity: [0.4, 1, 0.4]
+                scale: [1, 1.2, 1],
+                opacity: [0.3, 0.6, 0.3]
               }}
               transition={{
-                duration: 2,
+                duration: 3,
                 repeat: Infinity,
                 ease: 'easeInOut'
               }}
-            >
-              {progress < 30 && 'Initializing Neural Network...'}
-              {progress >= 30 && progress < 60 && 'Loading Cluster Topology...'}
-              {progress >= 60 && progress < 90 && 'Calibrating AI Agents...'}
-              {progress >= 90 && progress < 100 && 'Preparing Simulation...'}
-              {progress === 100 && 'Ready'}
-            </motion.div>
+            />
           </motion.div>
 
-          {/* Bottom decorative elements */}
+          {/* Tagline */}
           <motion.div
-            className="loading-bottom-decoration"
+            className="loading-tagline"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6, duration: 0.8 }}
+          >
+            Autonomous Kubernetes Intelligence
+          </motion.div>
+
+          {/* Minimal progress indicator */}
+          <motion.div
+            className="loading-progress-minimal"
             initial={{ opacity: 0, scaleX: 0 }}
             animate={{ opacity: 1, scaleX: 1 }}
-            transition={{ delay: 1.4, duration: 1, ease: 'easeOut' }}
+            transition={{ delay: 0.8, duration: 0.6 }}
           >
-            <div className="loading-decoration-line" />
-            <div className="loading-decoration-dot" />
-            <div className="loading-decoration-line" />
+            <motion.div
+              className="progress-bar-fill"
+              style={{ width: `${progress}%` }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+            />
           </motion.div>
-
-          {/* Skip button */}
-          {showSkip && progress < 100 && (
-            <motion.button
-              className="loading-skip-button"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              onClick={handleSkip}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <span>Skip Intro</span>
-              <span className="skip-hint">Press SPACE</span>
-            </motion.button>
-          )}
         </div>
 
-        {/* Floating particles */}
-        <div className="loading-particles-premium">
-          {Array.from({ length: 40 }).map((_, i) => (
+        {/* Floating orbs - premium effect */}
+        <div className="loading-orbs">
+          {Array.from({ length: 20 }).map((_, i) => (
             <motion.div
               key={i}
-              className="loading-particle-premium"
+              className="loading-orb"
               style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
+                left: `${10 + Math.random() * 80}%`,
+                top: `${10 + Math.random() * 80}%`,
               }}
               animate={{
-                y: [0, -100 - Math.random() * 200],
-                opacity: [0, 1, 0],
-                scale: [0, 1, 0.5]
+                y: [0, -30 - Math.random() * 40, 0],
+                x: [0, (Math.random() - 0.5) * 40, 0],
+                opacity: [0, 0.6, 0],
+                scale: [0, 1, 0]
               }}
               transition={{
-                duration: 3 + Math.random() * 4,
+                duration: 4 + Math.random() * 3,
                 repeat: Infinity,
-                delay: Math.random() * 3,
-                ease: 'easeOut'
+                delay: Math.random() * 2,
+                ease: 'easeInOut'
               }}
             />
           ))}
-        </div>
-
-        {/* Corner brackets */}
-        <div className="loading-corner-brackets">
-          <div className="loading-bracket loading-bracket-tl" />
-          <div className="loading-bracket loading-bracket-tr" />
-          <div className="loading-bracket loading-bracket-bl" />
-          <div className="loading-bracket loading-bracket-br" />
         </div>
       </motion.div>
     </AnimatePresence>
   )
 }
-
-// Made with Bob

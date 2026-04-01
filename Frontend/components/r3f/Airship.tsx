@@ -15,6 +15,7 @@ export default function Airship() {
   const { pointer, gl, camera } = useThree()
 
   const innerGroupRef = useRef<THREE.Group>(null)
+  const arrowRef = useRef<THREE.Group>(null)
   const velocityRef = useRef(new THREE.Vector3())
   const baseY = useRef(2)
   const shakeOffset = useRef(new THREE.Vector3())
@@ -132,6 +133,24 @@ export default function Airship() {
     if (!groupRef.current || frozen) return
     const t = state.clock.elapsedTime
     const g = groupRef.current
+
+    // Animate direction arrow - pulsing and slight bobbing
+    if (arrowRef.current) {
+      const pulse = Math.sin(t * 3) * 0.5 + 0.5 // 0 to 1
+      const bob = Math.sin(t * 2) * 0.05
+      arrowRef.current.position.y = 1.2 + bob
+      arrowRef.current.scale.setScalar(0.9 + pulse * 0.1)
+      
+      // Update arrow materials for pulsing glow
+      arrowRef.current.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial
+          if (mat && mat.emissive) {
+            mat.emissiveIntensity = 0.8 + pulse * 0.4
+          }
+        }
+      })
+    }
 
     // NEW: Player-controlled flight physics
     const isControllable = scene === 'calm' || airshipState === 'patrol' || airshipState === 'stable'
@@ -311,6 +330,54 @@ export default function Airship() {
     <group ref={groupRef} name="airship" position={[0, 2, 0]} scale={0.8}>
       <group ref={innerGroupRef}>
         <primitive object={gltfScene} />
+        
+        {/* Direction Indicator Arrow - Shows forward direction */}
+        <group ref={arrowRef} position={[0, 1.2, 0]}>
+          {/* Main arrow shaft */}
+          <mesh position={[0, 0, -0.8]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.08, 0.08, 0.6, 8]} />
+            <meshStandardMaterial
+              color="#00e5ff"
+              emissive="#00e5ff"
+              emissiveIntensity={0.8}
+              metalness={0.9}
+              roughness={0.2}
+            />
+          </mesh>
+          
+          {/* Arrow head (cone) */}
+          <mesh position={[0, 0, -1.2]} rotation={[Math.PI, 0, 0]}>
+            <coneGeometry args={[0.2, 0.4, 8]} />
+            <meshStandardMaterial
+              color="#00e5ff"
+              emissive="#00e5ff"
+              emissiveIntensity={1.2}
+              metalness={0.9}
+              roughness={0.1}
+            />
+          </mesh>
+          
+          {/* Glow effect around arrow */}
+          <pointLight
+            position={[0, 0, -1]}
+            intensity={2}
+            color="#00e5ff"
+            distance={3}
+            decay={2}
+          />
+          
+          {/* Pulsing ring at base */}
+          <mesh position={[0, 0, -0.5]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.15, 0.03, 8, 16]} />
+            <meshStandardMaterial
+              color="#00e5ff"
+              emissive="#00e5ff"
+              emissiveIntensity={0.6}
+              transparent
+              opacity={0.7}
+            />
+          </mesh>
+        </group>
       </group>
     </group>
   )

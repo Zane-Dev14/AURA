@@ -172,19 +172,15 @@ function GlitchParticles() {
 function FallingDebris() {
   const meshRef = useRef<THREE.InstancedMesh>(null)
   const dummy = useRef(new THREE.Object3D())
-  const velocities = useRef<THREE.Vector3[]>([])
-  
-  useEffect(() => {
-    for (let i = 0; i < 30; i++) {
-      velocities.current.push(
-        new THREE.Vector3(
-          (Math.random() - 0.5) * 2,
-          -Math.random() * 3 - 1,
-          (Math.random() - 0.5) * 2
-        )
+  const velocities = useRef<THREE.Vector3[]>(
+    Array.from({ length: 30 }, () =>
+      new THREE.Vector3(
+        (Math.random() - 0.5) * 2,
+        -Math.random() * 3 - 1,
+        (Math.random() - 0.5) * 2
       )
-    }
-  }, [])
+    )
+  )
   
   useFrame((state, delta) => {
     if (!meshRef.current) return
