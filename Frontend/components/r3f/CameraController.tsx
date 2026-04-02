@@ -92,6 +92,8 @@ export default function CameraController() {
   const shakeOffset = useRef(new THREE.Vector3())
   const tweenRef = useRef<gsap.core.Tween | null>(null)
   const fovTweenRef = useRef<gsap.core.Tween | null>(null)
+  const airshipVelocity = useRef(new THREE.Vector3())
+  const lastAirshipPosition = useRef(new THREE.Vector3(0, 2, 0))
   
   // Mouse drag rotation control
   const [isDragging, setIsDragging] = useState(false)
@@ -237,6 +239,10 @@ export default function CameraController() {
   useFrame((state, delta) => {
     const preset = cameraPresets[scene]
     
+    // Calculate airship velocity for prediction
+    airshipVelocity.current.copy(airshipPosition.current).sub(lastAirshipPosition.current).divideScalar(delta)
+    lastAirshipPosition.current.copy(airshipPosition.current)
+    
     // Third-person camera with drag rotation (for follow mode after intro)
     if (currentMode.current === 'follow' && introComplete) {
       // Calculate camera position using spherical coordinates around airship
@@ -251,18 +257,26 @@ export default function CameraController() {
       const offsetY = 3 + distance * Math.sin(verticalAngle)
       const offsetZ = distance * Math.cos(verticalAngle) * Math.cos(horizontalAngle)
       
+      // Add velocity-based offset for cinematic lag
+      const velocityOffset = airshipVelocity.current.clone().multiplyScalar(-0.5)
+      
       // Position camera relative to airship (follows airship movement)
       const targetPos = new THREE.Vector3(
-        airshipPosition.current.x + offsetX,
-        airshipPosition.current.y + offsetY,
-        airshipPosition.current.z + offsetZ
+        airshipPosition.current.x + offsetX + velocityOffset.x,
+        airshipPosition.current.y + offsetY + velocityOffset.y,
+        airshipPosition.current.z + offsetZ + velocityOffset.z
       )
       
-      // Smooth camera movement - follows airship
-      camera.position.lerp(targetPos, 0.1)
+      // Frame-rate independent lerping for smooth camera follow
+      const lerpFactor = 1 - Math.pow(0.001, delta)
+      camera.position.lerp(targetPos, lerpFactor * 0.15)
       
-      // Look at airship (slightly above center)
-      const lookTarget = airshipPosition.current.clone().add(new THREE.Vector3(0, 1, 0))
+      // Look ahead based on velocity for predictive camera
+      const predictedPosition = airshipPosition.current.clone()
+        .add(airshipVelocity.current.clone().multiplyScalar(0.3))
+      
+      // Look at predicted position (slightly above center)
+      const lookTarget = predictedPosition.clone().add(new THREE.Vector3(0, 1, 0))
       camera.lookAt(lookTarget)
       camera.updateMatrixWorld()
       return

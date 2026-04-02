@@ -1,41 +1,51 @@
 'use client'
-import { useRef, useMemo, useEffect, useState } from 'react'
-import { useFrame, useThree } from '@react-three/fiber'
+import { useRef, useMemo, useEffect } from 'react'
+import { useThree, useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { useSceneStore } from '@/store/useSceneStore'
 import * as THREE from 'three'
 import gsap from 'gsap'
+import { getTimelineController } from '@/lib/timelineController'
+import { floatAnimation, pulseGlow, EASINGS } from '@/lib/animationPresets'
+import { createNoise3D } from 'simplex-noise'
 
 useGLTF.preload('/models/small_spaceship.glb')
+
+// Movement profiles for different states
+const movementProfiles = {
+  calm: { acceleration: 20, maxSpeed: 10, damping: 0.93, angularDamping: 0.90 },
+  patrol: { acceleration: 18, maxSpeed: 9, damping: 0.93, angularDamping: 0.90 },
+  stressed: { acceleration: 25, maxSpeed: 12, damping: 0.90, angularDamping: 0.88 },
+  falling: { acceleration: 5, maxSpeed: 15, damping: 0.98, angularDamping: 0.95 },
+  locked: { acceleration: 0, maxSpeed: 0, damping: 0.85, angularDamping: 0.85 },
+  powered: { acceleration: 22, maxSpeed: 11, damping: 0.92, angularDamping: 0.89 },
+  stable: { acceleration: 20, maxSpeed: 10, damping: 0.93, angularDamping: 0.90 },
+}
 
 export default function Airship() {
   const { scene: gltfScene } = useGLTF('/models/small_spaceship.glb')
   const groupRef = useRef<THREE.Group>(null)
-  const { airshipState, frozen, assetsLoaded, scene } = useSceneStore()
-  const { pointer, gl, camera } = useThree()
-
+  const { airshipState, frozen, assetsLoaded } = useSceneStore()
+  const { camera } = useThree()
+  
   const innerGroupRef = useRef<THREE.Group>(null)
   const arrowRef = useRef<THREE.Group>(null)
-  const velocityRef = useRef(new THREE.Vector3())
-  const baseY = useRef(2)
-  const shakeOffset = useRef(new THREE.Vector3())
-  const emissiveRef = useRef(0)
-  const hoverPhase = useRef(0)
-  const rotationVelocity = useRef(0)
   
-  // NEW: Player control state
-  const [keys, setKeys] = useState({
-    forward: false,
-    backward: false,
-    left: false,
-    right: false,
-    up: false,
-    down: false,
-    boost: false
-  })
-  const targetRotation = useRef(new THREE.Euler())
-  const currentSpeed = useRef(0)
-  const trailPositions = useRef<THREE.Vector3[]>([])
+  // Physics state
+  const velocity = useRef(new THREE.Vector3())
+  const angularVelocity = useRef(new THREE.Euler())
+  const currentInput = useRef(new THREE.Vector3())
+  const keys = useRef({ w: false, s: false, a: false, d: false, q: false, e: false, ctrl: false })
+  
+  // Perlin noise for environmental effects
+  const noise3D = useMemo(() => createNoise3D(), [])
+  const noiseTime = useRef(0)
+  
+  // GSAP-based animation refs
+  const stateTimeline = useRef<gsap.core.Timeline | null>(null)
+  const floatTimeline = useRef<gsap.core.Timeline | null>(null)
+  const glowTimeline = useRef<gsap.core.Timeline | null>(null)
+  const physicsTimeline = useRef<gsap.core.Timeline | null>(null)
 
   // Apply premium showcase materials with enhanced emissive and clearcoat
   useMemo(() => {
@@ -67,264 +77,465 @@ export default function Airship() {
     })
   }, [gltfScene])
 
-  // Cinematic intro animation
-  useEffect(() => {
-    if (assetsLoaded && groupRef.current) {
-      // Start ship slightly behind and lower
-      groupRef.current.position.set(0, 0, -5)
-      groupRef.current.rotation.y = Math.PI * 0.2
-
-      // Smooth GSAP reveal
-      gsap.to(groupRef.current.position, {
-        y: 2,
-        z: 0,
-        duration: 3,
-        ease: 'power2.out',
-      })
-      gsap.to(groupRef.current.rotation, {
-        y: 0,
-        duration: 3.5,
-        ease: 'power2.inOut',
-      })
-    }
-  }, [assetsLoaded])
-
-  // NEW: Keyboard controls
+  // Keyboard input handling
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      setKeys(prev => {
-        const next = { ...prev }
-        const key = e.key.toLowerCase()
-        if (key === 'w' || key === 'arrowup') next.forward = true
-        if (key === 's' || key === 'arrowdown') next.backward = true
-        if (key === 'a' || key === 'arrowleft') next.left = true
-        if (key === 'd' || key === 'arrowright') next.right = true
-        if (key === ' ') next.up = true
-        if (e.shiftKey) next.down = true
-        if (e.ctrlKey || e.metaKey) next.boost = true
-        return next
-      })
+      const key = e.key.toLowerCase()
+      if (key === 'w') keys.current.w = true
+      if (key === 's') keys.current.s = true
+      if (key === 'a') keys.current.a = true
+      if (key === 'd') keys.current.d = true
+      if (key === 'q') keys.current.q = true
+      if (key === 'e') keys.current.e = true
+      if (key === 'control') keys.current.ctrl = true
     }
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      setKeys(prev => {
-        const next = { ...prev }
-        const key = e.key.toLowerCase()
-        if (key === 'w' || key === 'arrowup') next.forward = false
-        if (key === 's' || key === 'arrowdown') next.backward = false
-        if (key === 'a' || key === 'arrowleft') next.left = false
-        if (key === 'd' || key === 'arrowright') next.right = false
-        if (key === ' ') next.up = false
-        if (!e.shiftKey) next.down = false
-        if (!e.ctrlKey && !e.metaKey) next.boost = false
-        return next
-      })
+      const key = e.key.toLowerCase()
+      if (key === 'w') keys.current.w = false
+      if (key === 's') keys.current.s = false
+      if (key === 'a') keys.current.a = false
+      if (key === 'd') keys.current.d = false
+      if (key === 'q') keys.current.q = false
+      if (key === 'e') keys.current.e = false
+      if (key === 'control') keys.current.ctrl = false
     }
 
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
   }, [])
 
-  useFrame((state, delta) => {
-    if (!groupRef.current || frozen) return
-    const t = state.clock.elapsedTime
-    const g = groupRef.current
-
-    // Animate direction arrow - pulsing and slight bobbing
-    if (arrowRef.current) {
-      const pulse = Math.sin(t * 3) * 0.5 + 0.5 // 0 to 1
-      const bob = Math.sin(t * 2) * 0.05
-      arrowRef.current.position.y = 1.2 + bob
-      arrowRef.current.scale.setScalar(0.9 + pulse * 0.1)
+  // Cinematic intro animation using GSAP
+  useEffect(() => {
+    if (assetsLoaded && groupRef.current) {
+      const controller = getTimelineController()
       
-      // Update arrow materials for pulsing glow
-      arrowRef.current.traverse((child) => {
+      // Start ship slightly behind and lower
+      groupRef.current.position.set(0, 0, -5)
+      groupRef.current.rotation.y = Math.PI * 0.2
+
+      // Create intro timeline
+      const introTl = gsap.timeline()
+      
+      introTl.to(groupRef.current.position, {
+        y: 2,
+        z: 0,
+        duration: 3,
+        ease: EASINGS.SMOOTH_OUT,
+      })
+      
+      introTl.to(groupRef.current.rotation, {
+        y: 0,
+        duration: 3.5,
+        ease: EASINGS.SMOOTH_IN_OUT,
+      }, 0)
+
+      // Register with timeline controller
+      controller.registerScene('airship-intro', introTl, {
+        autoPlay: true,
+        onComplete: () => {
+          // Start floating animation after intro
+          if (groupRef.current) {
+            floatTimeline.current = floatAnimation(groupRef.current, {
+              amplitude: 0.15,
+              speed: 2,
+              axis: 'y',
+            })
+          }
+        },
+      })
+
+      return () => {
+        controller.unregisterScene('airship-intro')
+      }
+    }
+  }, [assetsLoaded])
+
+  // Arrow animation using GSAP
+  useEffect(() => {
+    if (arrowRef.current) {
+      const arrowGroup = arrowRef.current
+      
+      // Pulsing scale animation
+      const pulseTl = gsap.timeline({ repeat: -1, yoyo: true })
+      pulseTl.to(arrowGroup.scale, {
+        x: 1.1,
+        y: 1.1,
+        z: 1.1,
+        duration: 0.6,
+        ease: EASINGS.SINE_IN_OUT,
+      })
+
+      // Bobbing animation
+      const bobTl = gsap.timeline({ repeat: -1, yoyo: true })
+      bobTl.to(arrowGroup.position, {
+        y: 1.25,
+        duration: 1,
+        ease: EASINGS.SINE_IN_OUT,
+      })
+
+      // Glow pulse
+      arrowGroup.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {
           const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial
           if (mat && mat.emissive) {
-            mat.emissiveIntensity = 0.8 + pulse * 0.4
+            gsap.to(mat, {
+              emissiveIntensity: 1.2,
+              duration: 0.6,
+              ease: EASINGS.SINE_IN_OUT,
+              repeat: -1,
+              yoyo: true,
+            })
           }
         }
       })
-    }
 
-    // NEW: Player-controlled flight physics
-    const isControllable = scene === 'calm' || airshipState === 'patrol' || airshipState === 'stable'
+      return () => {
+        pulseTl.kill()
+        bobTl.kill()
+      }
+    }
+  }, [])
+
+  // State-based animations using GSAP (for non-interactive states)
+  useEffect(() => {
+    if (!groupRef.current || frozen) return
+
+    const group = groupRef.current
     
-    if (isControllable) {
-      // Calculate movement from input
-      const moveSpeed = keys.boost ? 15 : 8
-      const turnSpeed = 2.5
-      
-      // Forward/backward
-      if (keys.forward) {
-        const forward = new THREE.Vector3(0, 0, -1).applyEuler(g.rotation)
-        velocityRef.current.add(forward.multiplyScalar(moveSpeed * delta))
-      }
-      if (keys.backward) {
-        const backward = new THREE.Vector3(0, 0, 1).applyEuler(g.rotation)
-        velocityRef.current.add(backward.multiplyScalar(moveSpeed * delta * 0.5))
-      }
-      
-      // Strafe left/right
-      if (keys.left) {
-        targetRotation.current.y += turnSpeed * delta
-      }
-      if (keys.right) {
-        targetRotation.current.y -= turnSpeed * delta
-      }
-      
-      // Up/down
-      if (keys.up) velocityRef.current.y += moveSpeed * delta * 0.7
-      if (keys.down) velocityRef.current.y -= moveSpeed * delta * 0.7
-      
-      // Apply rotation smoothly
-      g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, targetRotation.current.y, 0.1)
-      
-      // Apply velocity with air resistance
-      g.position.add(velocityRef.current.clone().multiplyScalar(delta * 10))
-      velocityRef.current.multiplyScalar(0.92) // Air resistance
-      
-      // Banking based on turn rate
-      const turnRate = targetRotation.current.y - g.rotation.y
-      g.rotation.z = THREE.MathUtils.lerp(g.rotation.z, -turnRate * 2, 0.1)
-      
-      // Pitch based on vertical velocity
-      g.rotation.x = THREE.MathUtils.lerp(g.rotation.x, -velocityRef.current.y * 0.3, 0.1)
-      
-      // Track speed for effects
-      currentSpeed.current = velocityRef.current.length()
-      
-      // Store trail positions
-      if (trailPositions.current.length > 50) trailPositions.current.shift()
-      trailPositions.current.push(g.position.clone())
-      
-    } else {
-      // Original physics for non-controllable states
-      if (velocityRef.current) {
-        g.position.x += velocityRef.current.x * delta * 10
-        g.position.y += velocityRef.current.y * delta * 10
-        g.position.z += velocityRef.current.z * delta * 10
-
-        // Damping
-        velocityRef.current.multiplyScalar(0.95)
-
-        // Return to base position
-        const returnForce = 0.02
-        velocityRef.current.x += (0 - g.position.x) * returnForce
-        velocityRef.current.y += (baseY.current - g.position.y) * returnForce
-        velocityRef.current.z += (0 - g.position.z) * returnForce
-      }
+    // Kill existing state timeline
+    if (stateTimeline.current) {
+      stateTimeline.current.kill()
     }
 
-    // Automated behaviors for different states
-    switch (airshipState) {
-      case 'patrol': {
-        if (!isControllable) {
-          // Gentle hover with multiple sine waves for organic feel
-          hoverPhase.current += delta * 0.8
-          const hover1 = Math.sin(hoverPhase.current) * 0.12
-          const hover2 = Math.sin(hoverPhase.current * 1.7) * 0.05
-          const hover3 = Math.cos(hoverPhase.current * 0.6) * 0.08
-          g.position.y = baseY.current + hover1 + hover2 + hover3 + velocityRef.current.y
+    // Only use GSAP animations for locked states (non-interactive)
+    if (airshipState === 'locked' || airshipState === 'powered' || airshipState === 'stable') {
+      const tl = gsap.timeline()
 
-          // Slow natural rotation
-          rotationVelocity.current += (Math.sin(t * 0.3) * 0.002 - rotationVelocity.current) * 0.05
-          g.rotation.y += rotationVelocity.current
+      switch (airshipState) {
+        case 'locked': {
+          // Smooth lock into position
+          tl.to(group.position, {
+            x: 0,
+            y: 2.5,
+            z: 0,
+            duration: 1.5,
+            ease: EASINGS.SMOOTH_OUT,
+          })
 
-          // Subtle roll based on velocity
-          g.rotation.z = velocityRef.current.x * 0.3
+          tl.to(group.rotation, {
+            y: -Math.PI * 0.1,
+            z: 0,
+            x: 0,
+            duration: 1.5,
+            ease: EASINGS.SMOOTH_OUT,
+          }, 0)
+          break
         }
-        break
-      }
-      case 'stressed': {
-        g.position.y = baseY.current + Math.sin(t * 2) * 0.2 + Math.sin(t * 3.7) * 0.05
-        g.position.x = Math.sin(t * 0.8) * 2 + Math.sin(t * 2.1) * 0.3
-        g.rotation.z = Math.sin(t * 3) * 0.1
-        break
-      }
-      case 'falling': {
-        baseY.current = Math.max(-1, baseY.current - delta * 0.3)
-        g.position.y = baseY.current + Math.sin(t * 1.5) * 0.1
-        g.rotation.z = Math.sin(t * 0.5) * 0.3 + 0.2
-        shakeOffset.current.set(
-          (Math.random() - 0.5) * 0.1,
-          (Math.random() - 0.5) * 0.05,
-          0
-        )
-        g.position.x += shakeOffset.current.x
-        g.position.y += shakeOffset.current.y
-        break
-      }
-      case 'locked': {
-        g.position.x = THREE.MathUtils.lerp(g.position.x, 0, 0.05)
-        g.position.y = THREE.MathUtils.lerp(g.position.y, 2.5, 0.05)
-        g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, -Math.PI * 0.1, 0.05)
-        g.rotation.z = THREE.MathUtils.lerp(g.rotation.z, 0, 0.05)
-        break
-      }
-      case 'powered': {
-        emissiveRef.current = Math.min(2, emissiveRef.current + delta * 3)
-        g.position.x = THREE.MathUtils.lerp(g.position.x, 0, 0.08)
-        g.position.y = THREE.MathUtils.lerp(g.position.y, 3, 0.08)
-        g.rotation.y = 0
-        gltfScene.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial
-            if (mat) mat.emissiveIntensity = emissiveRef.current
-          }
-        })
-        break
-      }
-      case 'stable': {
-        if (!isControllable) {
-          emissiveRef.current = Math.max(0, emissiveRef.current - delta * 0.5)
-          g.position.x = THREE.MathUtils.lerp(g.position.x, 0, 0.03)
-          g.position.y = baseY.current + Math.sin(t * 0.6) * 0.1
-          g.rotation.z = THREE.MathUtils.lerp(g.rotation.z, 0, 0.03)
-        }
-        gltfScene.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial
-            if (mat) {
-              mat.emissive = new THREE.Color(0x00ff88)
-              mat.emissiveIntensity = 0.4
+
+        case 'powered': {
+          // Rise up with power
+          tl.to(group.position, {
+            x: 0,
+            y: 3,
+            z: 0,
+            duration: 2,
+            ease: EASINGS.SMOOTH_OUT,
+          })
+
+          tl.to(group.rotation, {
+            y: 0,
+            z: 0,
+            x: 0,
+            duration: 2,
+            ease: EASINGS.SMOOTH_OUT,
+          }, 0)
+
+          // Emissive intensity ramp
+          gltfScene.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial
+              if (mat) {
+                tl.to(mat, {
+                  emissiveIntensity: 2,
+                  duration: 2,
+                  ease: EASINGS.SMOOTH_OUT,
+                }, 0)
+              }
             }
-          }
-        })
-        break
+          })
+          break
+        }
+
+        case 'stable': {
+          // Gentle stable hover
+          tl.to(group.position, {
+            x: 0,
+            y: 2.1,
+            z: 0,
+            duration: 2,
+            ease: EASINGS.SMOOTH_OUT,
+          })
+
+          tl.to(group.rotation, {
+            z: 0,
+            x: 0,
+            duration: 2,
+            ease: EASINGS.SMOOTH_OUT,
+          }, 0)
+
+          // Gentle bob
+          tl.to(group.position, {
+            y: '+=0.1',
+            duration: 1.67,
+            ease: EASINGS.SINE_IN_OUT,
+            repeat: -1,
+            yoyo: true,
+          }, 2)
+
+          // Change emissive to green
+          gltfScene.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial
+              if (mat) {
+                const targetColor = new THREE.Color(0x00ff88)
+                tl.to(mat.emissive, {
+                  r: targetColor.r,
+                  g: targetColor.g,
+                  b: targetColor.b,
+                  duration: 1,
+                  ease: EASINGS.SMOOTH_OUT,
+                }, 0)
+
+                tl.to(mat, {
+                  emissiveIntensity: 0.4,
+                  duration: 1,
+                  ease: EASINGS.SMOOTH_OUT,
+                }, 0)
+              }
+            }
+          })
+          break
+        }
       }
+
+      stateTimeline.current = tl
     }
 
-    // Natural drift for non-controllable states (NO MOUSE CONTROL)
-    if (innerGroupRef.current && !isControllable) {
+    return () => {
+      if (stateTimeline.current) {
+        stateTimeline.current.kill()
+      }
+    }
+  }, [airshipState, frozen, gltfScene])
+
+  // Natural drift animation for inner group (GSAP-based)
+  useEffect(() => {
+    if (innerGroupRef.current) {
       const ig = innerGroupRef.current
+
+      // Natural drift animations
+      const driftTl = gsap.timeline({ repeat: -1 })
+
+      driftTl.to(ig.rotation, {
+        z: 0.03,
+        duration: 2,
+        ease: EASINGS.SINE_IN_OUT,
+        yoyo: true,
+        repeat: -1,
+      }, 0)
+
+      driftTl.to(ig.rotation, {
+        y: 0.02,
+        duration: 2.8,
+        ease: EASINGS.SINE_IN_OUT,
+        yoyo: true,
+        repeat: -1,
+      }, 0)
+
+      return () => {
+        driftTl.kill()
+      }
+    }
+  }, [])
+
+  // Physics-based movement system (useFrame)
+  useFrame((state, delta) => {
+    if (!groupRef.current || frozen) return
+
+    const group = groupRef.current
+    const profile = movementProfiles[airshipState] || movementProfiles.calm
+
+    // Skip physics for locked states (handled by GSAP)
+    if (airshipState === 'locked' || airshipState === 'powered' || airshipState === 'stable') {
+      return
+    }
+
+    // === INPUT HANDLING ===
+    const targetInput = new THREE.Vector3()
+    const inputSmoothing = 0.15
+
+    // Get raw input
+    if (keys.current.w) targetInput.z += 1
+    if (keys.current.s) targetInput.z -= 1
+    if (keys.current.a) targetInput.x -= 1
+    if (keys.current.d) targetInput.x += 1
+    if (keys.current.q) targetInput.y += 1
+    if (keys.current.e) targetInput.y -= 1
+
+    // Smooth input
+    currentInput.current.lerp(targetInput, inputSmoothing)
+
+    // === BOOST SYSTEM ===
+    const boostMultiplier = keys.current.ctrl ? 2.0 : 1.0
+    const boostDamping = keys.current.ctrl ? 0.96 : profile.damping
+
+    // Visual feedback for boost
+    if (keys.current.ctrl && 'fov' in camera) {
+      const perspectiveCamera = camera as THREE.PerspectiveCamera
+      perspectiveCamera.fov = THREE.MathUtils.lerp(perspectiveCamera.fov, 80, 0.1)
+      perspectiveCamera.updateProjectionMatrix()
+    } else if ('fov' in camera) {
+      const perspectiveCamera = camera as THREE.PerspectiveCamera
+      perspectiveCamera.fov = THREE.MathUtils.lerp(perspectiveCamera.fov, 75, 0.1)
+      perspectiveCamera.updateProjectionMatrix()
+    }
+
+    // === PHYSICS SYSTEM ===
+    // Apply input forces
+    if (currentInput.current.length() > 0.01) {
+      const force = currentInput.current.clone()
+        .normalize()
+        .multiplyScalar(profile.acceleration * boostMultiplier * delta)
       
-      // Only natural drift - no mouse influence
-      const naturalDriftY = Math.sin(t * 0.5) * 0.03
-      const naturalDriftX = Math.cos(t * 0.7) * 0.02
-      const naturalDriftZ = Math.sin(t * 0.3) * 0.02
+      velocity.current.add(force)
+    }
 
-      // Smooth natural drift only
-      ig.rotation.z = THREE.MathUtils.lerp(ig.rotation.z, naturalDriftZ, 0.05)
-      ig.rotation.x = THREE.MathUtils.lerp(ig.rotation.x, 0, 0.05)
-      ig.rotation.y = THREE.MathUtils.lerp(ig.rotation.y, naturalDriftY, 0.05)
+    // Clamp to max speed
+    const currentSpeed = velocity.current.length()
+    if (currentSpeed > profile.maxSpeed * boostMultiplier) {
+      velocity.current.normalize().multiplyScalar(profile.maxSpeed * boostMultiplier)
+    }
 
-      // Reset position offsets
-      ig.position.x = THREE.MathUtils.lerp(ig.position.x, 0, 0.06)
-      ig.position.y = THREE.MathUtils.lerp(ig.position.y, 0, 0.06)
+    // Apply damping (air resistance)
+    velocity.current.multiplyScalar(boostDamping)
+
+    // === ENVIRONMENTAL EFFECTS ===
+    noiseTime.current += delta
+
+    // Perlin noise for turbulence
+    const noiseScale = airshipState === 'stressed' ? 0.08 : 0.02
+    const noiseSpeed = airshipState === 'stressed' ? 2.0 : 0.5
+    
+    const noiseX = noise3D(noiseTime.current * noiseSpeed, 0, 0) * noiseScale
+    const noiseY = noise3D(0, noiseTime.current * noiseSpeed, 0) * noiseScale * 0.75
+    const noiseZ = noise3D(0, 0, noiseTime.current * noiseSpeed) * noiseScale
+
+    // Add turbulence to velocity
+    velocity.current.x += noiseX * delta * 10
+    velocity.current.y += noiseY * delta * 10
+    velocity.current.z += noiseZ * delta * 10
+
+    // Random gusts for stressed state
+    if (airshipState === 'stressed' && Math.random() < 0.01) {
+      velocity.current.add(new THREE.Vector3(
+        (Math.random() - 0.5) * 5,
+        (Math.random() - 0.5) * 3,
+        (Math.random() - 0.5) * 5
+      ))
+    }
+
+    // Gentle floating for patrol state
+    if (airshipState === 'patrol') {
+      const floatAmount = Math.sin(state.clock.elapsedTime * 0.5) * 0.3
+      group.position.y += floatAmount * delta
+    }
+
+    // Falling physics
+    if (airshipState === 'falling') {
+      velocity.current.y -= 9.8 * delta // Gravity
+      
+      // Shake effect
+      group.position.x += (Math.random() - 0.5) * 0.1 * delta * 10
+      group.position.z += (Math.random() - 0.5) * 0.1 * delta * 10
+    }
+
+    // === UPDATE POSITION ===
+    group.position.add(velocity.current.clone().multiplyScalar(delta))
+
+    // === SOFT COLLISION RESPONSE ===
+    const bounds = { x: 50, y: 30, z: 50 }
+
+    if (Math.abs(group.position.x) > bounds.x) {
+      velocity.current.x *= -0.5
+      group.position.x = Math.sign(group.position.x) * bounds.x
+    }
+
+    if (group.position.y > bounds.y) {
+      velocity.current.y *= -0.5
+      group.position.y = bounds.y
+    } else if (group.position.y < 0.5) {
+      velocity.current.y *= -0.5
+      group.position.y = 0.5
+    }
+
+    if (Math.abs(group.position.z) > bounds.z) {
+      velocity.current.z *= -0.5
+      group.position.z = Math.sign(group.position.z) * bounds.z
+    }
+
+    // === ROTATION & TILTING ===
+    // Only apply rotation if moving significantly
+    if (currentSpeed > 0.5) {
+      // Banking on turns (tilt based on horizontal velocity)
+      const tiltAmount = velocity.current.x * 0.15
+      group.rotation.z = THREE.MathUtils.lerp(group.rotation.z, tiltAmount, 0.1)
+
+      // Pitch on vertical movement
+      const pitchAmount = -velocity.current.y * 0.1
+      group.rotation.x = THREE.MathUtils.lerp(group.rotation.x, pitchAmount, 0.1)
+
+      // Yaw to face movement direction (only for horizontal movement)
+      const horizontalVelocity = new THREE.Vector3(velocity.current.x, 0, velocity.current.z)
+      if (horizontalVelocity.length() > 0.5) {
+        const targetYaw = Math.atan2(velocity.current.x, velocity.current.z)
+        group.rotation.y = THREE.MathUtils.lerp(group.rotation.y, targetYaw, 0.05)
+      }
+    } else {
+      // Return to neutral rotation when stopped
+      group.rotation.z = THREE.MathUtils.lerp(group.rotation.z, 0, 0.05)
+      group.rotation.x = THREE.MathUtils.lerp(group.rotation.x, 0, 0.05)
+    }
+
+    // === STRESSED STATE ERRATIC MOVEMENT ===
+    if (airshipState === 'stressed') {
+      group.rotation.z += Math.sin(state.clock.elapsedTime * 10) * 0.02
+    }
+
+    // === FALLING STATE ROTATION ===
+    if (airshipState === 'falling') {
+      group.rotation.z += delta * 0.3
+      group.rotation.x += delta * 0.2
     }
   })
 
-  useMemo(() => {
-    if (airshipState === 'patrol' || airshipState === 'stable') {
-      baseY.current = 2
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (stateTimeline.current) stateTimeline.current.kill()
+      if (floatTimeline.current) floatTimeline.current.kill()
+      if (glowTimeline.current) glowTimeline.current.kill()
+      if (physicsTimeline.current) physicsTimeline.current.kill()
+      
+      const controller = getTimelineController()
+      controller.unregisterScene('airship-intro')
     }
-  }, [airshipState])
+  }, [])
 
   return (
     <group ref={groupRef} name="airship" position={[0, 2, 0]} scale={0.8}>
