@@ -7,9 +7,14 @@ agents: 1
 ports:
   - port: 30090:30090 # Prometheus
   - port: 32322:32322 # Grafana
+  - port: 30089:30089 # Locust
 options:
   k3s:
     extraArgs:
       - arg: --disable=traefik
         nodeFilters:
           - server:0
+  runtime:
+    gpuRequest: ""
+    serversMemory: "4096M"
+    agentsMemory: "4096M"

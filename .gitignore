@@ -11,7 +11,10 @@ deployment/logs/
 
 # ML artifacts
 *.pth
-
+Frontend/node_modules/*
+node_modules/
+.next/
+Frontend/.next/
 # Python
 __pycache__/
 .env
