@@ -11,6 +11,7 @@ import FilmGrainOverlay from './ui/FilmGrainOverlay'
 import InteractionHints from './ui/InteractionHints'
 import StoryText from './ui/StoryText'
 import { unlockAudio } from '@/lib/sound'
+import type { Scene } from '@/store/useSceneStore'
 
 // Lazy load heavy components for better initial performance
 const SceneManager = lazy(() => import('./SceneManager'))
@@ -57,6 +58,69 @@ function FogController() {
   const initialPreset = fogPresets[useSceneStore.getState().scene] || fogPresets.calm
 
   return <fogExp2 ref={fogRef} attach="fog" args={[initialPreset.color, initialPreset.density]} />
+}
+
+const sceneAudioMap: Record<Scene, string> = {
+  calm: '/audio/calmMusic.mp3',
+  system: '/audio/kubernetesScene.mp3',
+  traffic: '/audio/kubernetesScene.mp3',
+  failure: '/audio/criticalState.mp3',
+  emotional: '/audio/criticalState.mp3',
+  qmix: '/audio/qmixReady.mp3',
+  transform: '/audio/qmixReady.mp3',
+  recovery: '/audio/successFinal.mp3',
+  comparison: '/audio/successFinal.mp3',
+}
+
+function SceneAudioManager() {
+  const scene = useSceneStore((state) => state.scene)
+  const audioUnlocked = useSceneStore((state) => state.audioUnlocked)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    if (!audioRef.current) {
+      const audio = new Audio()
+      audio.loop = true
+      audio.preload = 'auto'
+      audio.volume = 0.42
+      audioRef.current = audio
+    }
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ''
+        audioRef.current = null
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    if (!audioUnlocked) {
+      audio.pause()
+      return
+    }
+
+    const nextSrc = sceneAudioMap[scene]
+    if (!nextSrc) return
+
+    if (!audio.src.endsWith(nextSrc)) {
+      audio.src = nextSrc
+      audio.currentTime = 0
+    }
+
+    const playPromise = audio.play()
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {
+        // Browser autoplay policy can still block before a valid interaction.
+      })
+    }
+  }, [audioUnlocked, scene])
+
+  return null
 }
 
 export default function AuraDemo() {
@@ -183,6 +247,7 @@ export default function AuraDemo() {
       <StoryText />
       <FilmGrainOverlay />
       <InteractionHints />
+      <SceneAudioManager />
     </div>
   )
 }

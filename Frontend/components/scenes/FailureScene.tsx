@@ -226,11 +226,11 @@ export default function FailureScene() {
   const masterTimeline = useRef<gsap.core.Timeline | null>(null)
 
   useEffect(() => {
-    setPodCount(2)
+    setPodCount(1)
     setPodHealth(0.1)
     setAirshipState('falling')
     if (audioUnlocked) playGlitchBurst()
-    setMetrics({ failures: 47, latencyMs: 4200, cpuPercent: 116 })
+    setMetrics({ failures: 47, pods: 1, latencyMs: 4200, cpuPercent: 116 })
     
     // Create dramatic failure sequence with GSAP
     const tl = gsap.timeline()
@@ -240,18 +240,6 @@ export default function FailureScene() {
     
     // Camera shake sequence
     tl.add(cameraShake(camera, 0.8, 2), 0.3)
-    
-    // Continuous rumble
-    const rumbleObj = { intensity: 0 }
-    tl.to(rumbleObj, {
-      intensity: 1,
-      duration: 3,
-      ease: 'power2.in',
-      onUpdate: () => {
-        camera.position.x += (Math.random() - 0.5) * 0.1 * rumbleObj.intensity
-        camera.position.y += (Math.random() - 0.5) * 0.05 * rumbleObj.intensity
-      }
-    }, 0.5)
     
     // Glitch intensity ramps up with steps for glitchy feel
     const glitchObj = { value: 0 }

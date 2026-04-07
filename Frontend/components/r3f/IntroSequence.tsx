@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useThree, useFrame } from '@react-three/fiber'
 import { useSceneStore } from '@/store/useSceneStore'
 import { Text } from '@react-three/drei'
@@ -23,7 +23,7 @@ export default function IntroSequence() {
   
   // Cinematic particles
   const particlesRef = useRef<THREE.Points>(null)
-  const particleCount = 2000
+  const particleCount = 600
   
   useEffect(() => {
     if (!assetsLoaded || introComplete) return
@@ -110,24 +110,11 @@ export default function IntroSequence() {
     }
   }, [assetsLoaded, introComplete, camera, setIntroComplete])
 
-  // Animate particles
+  // Animate particles (rotation-only for performance during intro)
   useFrame((state) => {
     if (introComplete || !particlesRef.current) return
-    
-    const positions = particlesRef.current.geometry.attributes.position.array as Float32Array
-    const time = state.clock.elapsedTime
-    
-    for (let i = 0; i < particleCount; i++) {
-      const i3 = i * 3
-      const x = positions[i3]
-      const z = positions[i3 + 2]
-      
-      // Spiral outward motion
-      positions[i3 + 1] += Math.sin(time + i * 0.1) * 0.02
-    }
-    
-    particlesRef.current.geometry.attributes.position.needsUpdate = true
-    particlesRef.current.rotation.y = time * 0.1
+
+    particlesRef.current.rotation.y = state.clock.elapsedTime * 0.1
   })
 
   // Skip handler
@@ -142,20 +129,23 @@ export default function IntroSequence() {
     return () => window.removeEventListener('keydown', handleSkip)
   }, [introComplete, setIntroComplete])
 
-  if (introComplete) return null
+  // Generate particle positions once to avoid repeated allocations during timeline updates.
+  const particlePositions = useMemo(() => {
+    const positions = new Float32Array(particleCount * 3)
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3
+      const radius = 5 + Math.random() * 15
+      const theta = Math.random() * Math.PI * 2
+      const phi = Math.random() * Math.PI
 
-  // Generate particle positions
-  const particlePositions = new Float32Array(particleCount * 3)
-  for (let i = 0; i < particleCount; i++) {
-    const i3 = i * 3
-    const radius = 5 + Math.random() * 15
-    const theta = Math.random() * Math.PI * 2
-    const phi = Math.random() * Math.PI
-    
-    particlePositions[i3] = radius * Math.sin(phi) * Math.cos(theta)
-    particlePositions[i3 + 1] = (Math.random() - 0.5) * 10
-    particlePositions[i3 + 2] = radius * Math.sin(phi) * Math.sin(theta)
-  }
+      positions[i3] = radius * Math.sin(phi) * Math.cos(theta)
+      positions[i3 + 1] = (Math.random() - 0.5) * 10
+      positions[i3 + 2] = radius * Math.sin(phi) * Math.sin(theta)
+    }
+    return positions
+  }, [particleCount])
+
+  if (introComplete) return null
 
   return (
     <>

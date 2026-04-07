@@ -1,7 +1,5 @@
 'use client'
-import dynamic from 'next/dynamic'
-
-const AuraDemo = dynamic(() => import('@/components/AuraDemo'), { ssr: false })
+import AuraDemo from '@/components/AuraDemo'
 
 export default function Home() {
   return <AuraDemo />

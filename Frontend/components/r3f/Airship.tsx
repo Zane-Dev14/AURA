@@ -5,16 +5,15 @@ import { useGLTF } from '@react-three/drei'
 import { useSceneStore } from '@/store/useSceneStore'
 import * as THREE from 'three'
 import gsap from 'gsap'
-import { getTimelineController } from '@/lib/timelineController'
-import { floatAnimation, EASINGS } from '@/lib/animationPresets'
+import { EASINGS } from '@/lib/animationPresets'
 import { createNoise3D } from 'simplex-noise'
 
 useGLTF.preload('/models/small_spaceship.glb')
 
 // Movement profiles for different states
 const movementProfiles = {
-  calm: { acceleration: 20, maxSpeed: 10, damping: 0.93, angularDamping: 0.90 },
-  patrol: { acceleration: 18, maxSpeed: 9, damping: 0.93, angularDamping: 0.90 },
+  calm: { acceleration: 28, maxSpeed: 16, damping: 0.95, angularDamping: 0.90 },
+  patrol: { acceleration: 26, maxSpeed: 15, damping: 0.95, angularDamping: 0.90 },
   stressed: { acceleration: 25, maxSpeed: 12, damping: 0.90, angularDamping: 0.88 },
   falling: { acceleration: 5, maxSpeed: 15, damping: 0.98, angularDamping: 0.95 },
   locked: { acceleration: 0, maxSpeed: 0, damping: 0.85, angularDamping: 0.85 },
@@ -25,7 +24,7 @@ const movementProfiles = {
 export default function Airship() {
   const { scene: gltfScene } = useGLTF('/models/small_spaceship.glb')
   const groupRef = useRef<THREE.Group>(null)
-  const { airshipState, frozen, assetsLoaded, scene } = useSceneStore()
+  const { airshipState, frozen, assetsLoaded, scene, introComplete } = useSceneStore()
   
   const innerGroupRef = useRef<THREE.Group>(null)
   const arrowRef = useRef<THREE.Group>(null)
@@ -50,7 +49,8 @@ export default function Airship() {
   const glowTimeline = useRef<gsap.core.Timeline | null>(null)
   const physicsTimeline = useRef<gsap.core.Timeline | null>(null)
 
-  const SYSTEM_SPAWN = useMemo(() => new THREE.Vector3(0, 24, 10), [])
+  const SYSTEM_SPAWN = useMemo(() => new THREE.Vector3(0, 30.5, 0), [])
+  const SYSTEM_FOCUS = useMemo(() => new THREE.Vector3(0, 30.5, -18), [])
 
   // Apply premium showcase materials with enhanced emissive and clearcoat
   useMemo(() => {
@@ -169,11 +169,13 @@ export default function Airship() {
     if (!groupRef.current || scene !== 'system') return
 
     groupRef.current.position.copy(SYSTEM_SPAWN)
-    groupRef.current.rotation.set(0, 0, 0)
+    groupRef.current.lookAt(SYSTEM_FOCUS)
+    groupRef.current.rotation.x = 0
+    groupRef.current.rotation.z = 0
     velocity.current.set(0, 0, 0)
     currentInput.current.set(0, 0, 0)
     rotationInput.current = 0
-  }, [scene, SYSTEM_SPAWN])
+  }, [scene, SYSTEM_SPAWN, SYSTEM_FOCUS])
 
   // Avoid timeline-vs-physics conflicts in controllable exploration scenes.
   useEffect(() => {
@@ -184,50 +186,15 @@ export default function Airship() {
     }
   }, [scene])
 
-  // Cinematic intro animation using GSAP
+  // Keep controls responsive immediately in calm scene; no auto-flight timeline.
   useEffect(() => {
-    if (scene !== 'calm') return
-    if (assetsLoaded && groupRef.current) {
-      const controller = getTimelineController()
-      
-      // Start ship slightly behind and lower
-      groupRef.current.position.set(0, 0, -5)
-      groupRef.current.rotation.y = Math.PI * 0.2
-
-      // Create intro timeline
-      const introTl = gsap.timeline()
-      
-      introTl.to(groupRef.current.position, {
-        y: 2,
-        z: 0,
-        duration: 3,
-        ease: EASINGS.SMOOTH_OUT,
-      })
-      
-      introTl.to(groupRef.current.rotation, {
-        y: 0,
-        duration: 3.5,
-        ease: EASINGS.SMOOTH_IN_OUT,
-      }, 0)
-
-      // Register with timeline controller
-      controller.registerScene('airship-intro', introTl, {
-        autoPlay: true,
-        onComplete: () => {
-          // Start floating animation after intro
-          if (groupRef.current) {
-            floatTimeline.current = floatAnimation(groupRef.current, {
-              amplitude: 0.15,
-              speed: 2,
-              axis: 'y',
-            })
-          }
-        },
-      })
-
-      return () => {
-        controller.unregisterScene('airship-intro')
-      }
+    if (!assetsLoaded || !groupRef.current) return
+    if (scene === 'calm') {
+      groupRef.current.position.set(0, 3.5, 4)
+      groupRef.current.rotation.set(0, 0, 0)
+      velocity.current.set(0, 0, 0)
+      currentInput.current.set(0, 0, 0)
+      rotationInput.current = 0
     }
   }, [assetsLoaded, scene])
 
@@ -488,7 +455,7 @@ export default function Airship() {
     // === ROTATION SYSTEM ===
     // Apply rotation from A/D keys
     if (Math.abs(rotationInput.current) > 0.01) {
-      group.rotation.y += rotationInput.current * delta * 2.5
+      group.rotation.y += rotationInput.current * delta * 3.4
     }
 
     // === PHYSICS SYSTEM ===
@@ -569,7 +536,7 @@ export default function Airship() {
 
     // === SOFT COLLISION RESPONSE ===
     const bounds = scene === 'system'
-      ? { x: 18, yMin: 18, yMax: 34, z: 18 }
+      ? { x: 16, yMin: 27.5, yMax: 46, z: 16 }
       : { x: 50, yMin: 0.5, yMax: 30, z: 50 }
 
     if (Math.abs(group.position.x) > bounds.x) {
@@ -628,9 +595,6 @@ export default function Airship() {
       if (floatTimeline.current) floatTimeline.current.kill()
       if (glowTimeline.current) glowTimeline.current.kill()
       if (physicsTimeline.current) physicsTimeline.current.kill()
-      
-      const controller = getTimelineController()
-      controller.unregisterScene('airship-intro')
     }
   }, [])
 
@@ -640,7 +604,7 @@ export default function Airship() {
         <primitive object={gltfScene} />
         
         {/* Direction Indicator Arrow - Shows forward direction */}
-        <group ref={arrowRef} position={[0, 1.2, 0]}>
+        {scene !== 'calm' && introComplete && <group ref={arrowRef} position={[0, 1.2, 0]}>
           {/* Main arrow shaft */}
           <mesh position={[0, 0, -0.8]} rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[0.08, 0.08, 0.6, 8]} />
@@ -653,15 +617,15 @@ export default function Airship() {
             />
           </mesh>
           
-          {/* Arrow head (cone) */}
-          <mesh position={[0, 0, -1.2]} rotation={[Math.PI, 0, 0]}>
-            <coneGeometry args={[0.2, 0.4, 8]} />
+          {/* Arrow head */}
+          <mesh position={[0, 0, -1.2]}>
+            <sphereGeometry args={[0.16, 10, 10]} />
             <meshStandardMaterial
               color="#00e5ff"
               emissive="#00e5ff"
-              emissiveIntensity={1.2}
+              emissiveIntensity={1.0}
               metalness={0.9}
-              roughness={0.1}
+              roughness={0.15}
             />
           </mesh>
           
@@ -685,7 +649,7 @@ export default function Airship() {
               opacity={0.7}
             />
           </mesh>
-        </group>
+        </group>}
       </group>
     </group>
   )

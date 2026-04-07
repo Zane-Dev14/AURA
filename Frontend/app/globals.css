@@ -430,6 +430,10 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--dark
   /* Corner bracket decoration */
   position: relative;
 }
+
+.aura-root[data-scene='comparison'] .metrics-panel {
+  display: none;
+}
 .metrics-panel::before,
 .metrics-panel::after {
   content: '';
