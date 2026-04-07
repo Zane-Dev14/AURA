@@ -68,6 +68,9 @@ export default function CalmWorld() {
         distance={40}
         decay={2}
         castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-bias={-0.0001}
       />
       
       {/* SPOTLIGHT - Dramatic top-down hero spotlight */}
@@ -81,6 +84,9 @@ export default function CalmWorld() {
         distance={30}
         decay={2}
         castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-bias={-0.0001}
         target-position={[0, 2, 0]}
       />
       

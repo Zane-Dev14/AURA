@@ -1,12 +1,12 @@
 'use client'
 import { useRef, useMemo, useEffect } from 'react'
-import { useThree, useFrame } from '@react-three/fiber'
+import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { useSceneStore } from '@/store/useSceneStore'
 import * as THREE from 'three'
 import gsap from 'gsap'
 import { getTimelineController } from '@/lib/timelineController'
-import { floatAnimation, pulseGlow, EASINGS } from '@/lib/animationPresets'
+import { floatAnimation, EASINGS } from '@/lib/animationPresets'
 import { createNoise3D } from 'simplex-noise'
 
 useGLTF.preload('/models/small_spaceship.glb')
@@ -25,8 +25,7 @@ const movementProfiles = {
 export default function Airship() {
   const { scene: gltfScene } = useGLTF('/models/small_spaceship.glb')
   const groupRef = useRef<THREE.Group>(null)
-  const { airshipState, frozen, assetsLoaded } = useSceneStore()
-  const { camera } = useThree()
+  const { airshipState, frozen, assetsLoaded, scene } = useSceneStore()
   
   const innerGroupRef = useRef<THREE.Group>(null)
   const arrowRef = useRef<THREE.Group>(null)
@@ -35,7 +34,11 @@ export default function Airship() {
   const velocity = useRef(new THREE.Vector3())
   const angularVelocity = useRef(new THREE.Euler())
   const currentInput = useRef(new THREE.Vector3())
-  const keys = useRef({ w: false, s: false, a: false, d: false, q: false, e: false, ctrl: false })
+  const rotationInput = useRef(0)
+  const keys = useRef({
+    w: false, s: false, a: false, d: false,
+    space: false, shift: false, ctrl: false
+  })
   
   // Perlin noise for environmental effects
   const noise3D = useMemo(() => createNoise3D(), [])
@@ -46,6 +49,8 @@ export default function Airship() {
   const floatTimeline = useRef<gsap.core.Timeline | null>(null)
   const glowTimeline = useRef<gsap.core.Timeline | null>(null)
   const physicsTimeline = useRef<gsap.core.Timeline | null>(null)
+
+  const SYSTEM_SPAWN = useMemo(() => new THREE.Vector3(0, 24, 10), [])
 
   // Apply premium showcase materials with enhanced emissive and clearcoat
   useMemo(() => {
@@ -81,37 +86,107 @@ export default function Airship() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase()
+
       if (key === 'w') keys.current.w = true
       if (key === 's') keys.current.s = true
       if (key === 'a') keys.current.a = true
       if (key === 'd') keys.current.d = true
-      if (key === 'q') keys.current.q = true
-      if (key === 'e') keys.current.e = true
-      if (key === 'control') keys.current.ctrl = true
+
+      if (e.code === 'Space') {
+        e.preventDefault()
+        keys.current.space = true
+      }
+
+      if (key === ' ' || key === 'spacebar') {
+        e.preventDefault()
+        keys.current.space = true
+      }
+
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+        e.preventDefault()
+        keys.current.shift = true
+      }
+
+      if (key === 'shift') {
+        e.preventDefault()
+        keys.current.shift = true
+      }
+
+      if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
+        keys.current.ctrl = true
+      }
     }
 
     const handleKeyUp = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase()
+
       if (key === 'w') keys.current.w = false
       if (key === 's') keys.current.s = false
       if (key === 'a') keys.current.a = false
       if (key === 'd') keys.current.d = false
-      if (key === 'q') keys.current.q = false
-      if (key === 'e') keys.current.e = false
-      if (key === 'control') keys.current.ctrl = false
+
+      if (e.code === 'Space') keys.current.space = false
+      if (key === ' ' || key === 'spacebar') keys.current.space = false
+
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+        keys.current.shift = false
+      }
+
+      if (key === 'shift') {
+        keys.current.shift = false
+      }
+
+      if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
+        keys.current.ctrl = false
+      }
+    }
+
+    const resetKeys = () => {
+      keys.current = {
+        w: false,
+        s: false,
+        a: false,
+        d: false,
+        space: false,
+        shift: false,
+        ctrl: false,
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('blur', resetKeys)
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('blur', resetKeys)
     }
   }, [])
 
+  // Scene 2 spawn point: place airship above the world so exploration starts at the top.
+  useEffect(() => {
+    if (!groupRef.current || scene !== 'system') return
+
+    groupRef.current.position.copy(SYSTEM_SPAWN)
+    groupRef.current.rotation.set(0, 0, 0)
+    velocity.current.set(0, 0, 0)
+    currentInput.current.set(0, 0, 0)
+    rotationInput.current = 0
+  }, [scene, SYSTEM_SPAWN])
+
+  // Avoid timeline-vs-physics conflicts in controllable exploration scenes.
+  useEffect(() => {
+    if (!floatTimeline.current) return
+    if (scene === 'system') {
+      floatTimeline.current.kill()
+      floatTimeline.current = null
+    }
+  }, [scene])
+
   // Cinematic intro animation using GSAP
   useEffect(() => {
+    if (scene !== 'calm') return
     if (assetsLoaded && groupRef.current) {
       const controller = getTimelineController()
       
@@ -154,7 +229,7 @@ export default function Airship() {
         controller.unregisterScene('airship-intro')
       }
     }
-  }, [assetsLoaded])
+  }, [assetsLoaded, scene])
 
   // Arrow animation using GSAP
   useEffect(() => {
@@ -376,40 +451,64 @@ export default function Airship() {
       return
     }
 
+    // Ensure manual controls are not fighting GSAP float timeline.
+    if (floatTimeline.current && scene === 'system') {
+      floatTimeline.current.kill()
+      floatTimeline.current = null
+    }
+
     // === INPUT HANDLING ===
     const targetInput = new THREE.Vector3()
     const inputSmoothing = 0.15
 
-    // Get raw input
-    if (keys.current.w) targetInput.z += 1
-    if (keys.current.s) targetInput.z -= 1
-    if (keys.current.a) targetInput.x -= 1
-    if (keys.current.d) targetInput.x += 1
-    if (keys.current.q) targetInput.y += 1
-    if (keys.current.e) targetInput.y -= 1
+    // Get raw input - FIXED CONTROLS
+    // W/S: Forward/Backward (negative Z is forward in Three.js)
+    if (keys.current.w) targetInput.z -= 1  // Forward
+    if (keys.current.s) targetInput.z += 1  // Backward
+    
+    // Space/Shift: Up/Down
+    if (keys.current.space) targetInput.y += 1  // Up
+    if (keys.current.shift) targetInput.y -= 1  // Down
+    
+    // A/D: Rotation (handled separately below)
+    let targetRotation = 0
+    if (keys.current.a) targetRotation = 1   // Rotate left
+    if (keys.current.d) targetRotation = -1  // Rotate right
+    rotationInput.current = THREE.MathUtils.lerp(rotationInput.current, targetRotation, 0.1)
 
-    // Smooth input
-    currentInput.current.lerp(targetInput, inputSmoothing)
+    // Smooth horizontal movement, but keep vertical input immediate for responsive Space/Shift.
+    currentInput.current.x = THREE.MathUtils.lerp(currentInput.current.x, targetInput.x, inputSmoothing)
+    currentInput.current.z = THREE.MathUtils.lerp(currentInput.current.z, targetInput.z, inputSmoothing)
+    currentInput.current.y = targetInput.y
 
     // === BOOST SYSTEM ===
     const boostMultiplier = keys.current.ctrl ? 2.0 : 1.0
     const boostDamping = keys.current.ctrl ? 0.96 : profile.damping
 
-    // Visual feedback for boost
-    if (keys.current.ctrl && 'fov' in camera) {
-      const perspectiveCamera = camera as THREE.PerspectiveCamera
-      perspectiveCamera.fov = THREE.MathUtils.lerp(perspectiveCamera.fov, 80, 0.1)
-      perspectiveCamera.updateProjectionMatrix()
-    } else if ('fov' in camera) {
-      const perspectiveCamera = camera as THREE.PerspectiveCamera
-      perspectiveCamera.fov = THREE.MathUtils.lerp(perspectiveCamera.fov, 75, 0.1)
-      perspectiveCamera.updateProjectionMatrix()
+    // === ROTATION SYSTEM ===
+    // Apply rotation from A/D keys
+    if (Math.abs(rotationInput.current) > 0.01) {
+      group.rotation.y += rotationInput.current * delta * 2.5
     }
 
     // === PHYSICS SYSTEM ===
-    // Apply input forces
+    // Apply input forces - horizontal in local space, vertical in world space
     if (currentInput.current.length() > 0.01) {
-      const force = currentInput.current.clone()
+      // Separate horizontal (XZ) and vertical (Y) movement
+      const horizontalInput = new THREE.Vector3(0, 0, currentInput.current.z)
+      const verticalInput = currentInput.current.y
+      
+      // Transform horizontal input to world space based on ship's rotation
+      const worldHorizontal = horizontalInput.applyEuler(new THREE.Euler(0, group.rotation.y, 0))
+      
+      // Combine: horizontal in local space + vertical in world space
+      const finalForce = new THREE.Vector3(
+        worldHorizontal.x,
+        verticalInput, // Y always in world space
+        worldHorizontal.z
+      )
+      
+      const force = finalForce
         .normalize()
         .multiplyScalar(profile.acceleration * boostMultiplier * delta)
       
@@ -429,8 +528,8 @@ export default function Airship() {
     noiseTime.current += delta
 
     // Perlin noise for turbulence
-    const noiseScale = airshipState === 'stressed' ? 0.08 : 0.02
-    const noiseSpeed = airshipState === 'stressed' ? 2.0 : 0.5
+    const noiseScale = airshipState === 'stressed' ? 0.08 : (scene === 'system' ? 0 : 0.003)
+    const noiseSpeed = airshipState === 'stressed' ? 2.0 : 0.2
     
     const noiseX = noise3D(noiseTime.current * noiseSpeed, 0, 0) * noiseScale
     const noiseY = noise3D(0, noiseTime.current * noiseSpeed, 0) * noiseScale * 0.75
@@ -451,7 +550,7 @@ export default function Airship() {
     }
 
     // Gentle floating for patrol state
-    if (airshipState === 'patrol') {
+    if (airshipState === 'patrol' && scene !== 'system') {
       const floatAmount = Math.sin(state.clock.elapsedTime * 0.5) * 0.3
       group.position.y += floatAmount * delta
     }
@@ -469,19 +568,21 @@ export default function Airship() {
     group.position.add(velocity.current.clone().multiplyScalar(delta))
 
     // === SOFT COLLISION RESPONSE ===
-    const bounds = { x: 50, y: 30, z: 50 }
+    const bounds = scene === 'system'
+      ? { x: 18, yMin: 18, yMax: 34, z: 18 }
+      : { x: 50, yMin: 0.5, yMax: 30, z: 50 }
 
     if (Math.abs(group.position.x) > bounds.x) {
       velocity.current.x *= -0.5
       group.position.x = Math.sign(group.position.x) * bounds.x
     }
 
-    if (group.position.y > bounds.y) {
+    if (group.position.y > bounds.yMax) {
       velocity.current.y *= -0.5
-      group.position.y = bounds.y
-    } else if (group.position.y < 0.5) {
+      group.position.y = bounds.yMax
+    } else if (group.position.y < bounds.yMin) {
       velocity.current.y *= -0.5
-      group.position.y = 0.5
+      group.position.y = bounds.yMin
     }
 
     if (Math.abs(group.position.z) > bounds.z) {
@@ -490,25 +591,21 @@ export default function Airship() {
     }
 
     // === ROTATION & TILTING ===
-    // Only apply rotation if moving significantly
-    if (currentSpeed > 0.5) {
-      // Banking on turns (tilt based on horizontal velocity)
-      const tiltAmount = velocity.current.x * 0.15
-      group.rotation.z = THREE.MathUtils.lerp(group.rotation.z, tiltAmount, 0.1)
+    // Banking on turns (tilt based on rotation input)
+    const tiltAmount = -rotationInput.current * 0.3
+    group.rotation.z = THREE.MathUtils.lerp(group.rotation.z, tiltAmount, 0.1)
 
-      // Pitch on vertical movement
-      const pitchAmount = -velocity.current.y * 0.1
-      group.rotation.x = THREE.MathUtils.lerp(group.rotation.x, pitchAmount, 0.1)
+    // Pitch on vertical movement
+    const pitchAmount = -velocity.current.y * 0.08
+    group.rotation.x = THREE.MathUtils.lerp(group.rotation.x, pitchAmount, 0.1)
 
-      // Yaw to face movement direction (only for horizontal movement)
-      const horizontalVelocity = new THREE.Vector3(velocity.current.x, 0, velocity.current.z)
-      if (horizontalVelocity.length() > 0.5) {
-        const targetYaw = Math.atan2(velocity.current.x, velocity.current.z)
-        group.rotation.y = THREE.MathUtils.lerp(group.rotation.y, targetYaw, 0.05)
-      }
-    } else {
-      // Return to neutral rotation when stopped
+    // Return to neutral tilt when not turning
+    if (Math.abs(rotationInput.current) < 0.01) {
       group.rotation.z = THREE.MathUtils.lerp(group.rotation.z, 0, 0.05)
+    }
+    
+    // Return to neutral pitch when not moving vertically
+    if (Math.abs(velocity.current.y) < 0.1) {
       group.rotation.x = THREE.MathUtils.lerp(group.rotation.x, 0, 0.05)
     }
 

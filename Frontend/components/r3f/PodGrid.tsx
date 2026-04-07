@@ -1,5 +1,5 @@
 'use client'
-import { useRef, useMemo, useEffect } from 'react'
+import { useRef, useMemo, useEffect, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useSceneStore } from '@/store/useSceneStore'
 import * as THREE from 'three'
@@ -38,8 +38,10 @@ void main() {
 
 export default function PodGrid() {
   const meshRef = useRef<THREE.InstancedMesh>(null)
-  const matRef = useRef<THREE.ShaderMaterial>(null)
   const { podCount, podHealth, frozen } = useSceneStore()
+
+  const [hoveredInstanceId, setHoveredInstanceId] = useState<number | null>(null)
+  const [selectedInstanceId, setSelectedInstanceId] = useState<number | null>(null)
 
   const dummy = useMemo(() => new THREE.Object3D(), [])
   const scales = useRef<Float32Array>(new Float32Array(MAX_PODS).fill(0))
@@ -91,14 +93,7 @@ export default function PodGrid() {
   }, [])
 
   useFrame((state, delta) => {
-    if (!meshRef.current || !matRef.current) return
-    if (!frozen) matRef.current.uniforms.uTime.value = state.clock.elapsedTime
-    
-    // Smooth health transition with GSAP-like easing
-    const healthDiff = podHealth - matRef.current.uniforms.uHealth.value
-    const healthEase = healthDiff * delta * 3
-    matRef.current.uniforms.uHealth.value += healthEase
-    matRef.current.uniforms.uPulse.value = 1
+    if (!meshRef.current) return
 
     for (let i = 0; i < MAX_PODS; i++) {
       // Use GSAP-animated scales (no more lerp!)
@@ -122,8 +117,37 @@ export default function PodGrid() {
       transparent: true,
       opacity: 0.9
     })
+    mat.vertexColors = true
     return mat
   }, [])
+
+  // Initialize and maintain per-instance colors (for hover/select interaction)
+  useEffect(() => {
+    if (!meshRef.current) return
+
+    // Instance colors multiply the material color. Keep default neutral (white)
+    // so the GSAP-driven health color on the material remains accurate.
+    const baseColor = new THREE.Color(1, 1, 1)
+    const hoverTint = new THREE.Color(0.6, 1.0, 1.0)
+    const selectedTint = new THREE.Color(1.0, 1.0, 1.0)
+
+    for (let i = 0; i < MAX_PODS; i++) {
+      // Hide inactive pods by keeping them dark; scale animation already handles visibility
+      const isActive = i < podCount
+      const isHovered = hoveredInstanceId === i
+      const isSelected = selectedInstanceId === i
+
+      const c = isSelected ? selectedTint : isHovered ? hoverTint : baseColor
+
+      // Keep inactive pods visually subdued
+      const finalColor = isActive ? c : baseColor.clone().multiplyScalar(0.05)
+      meshRef.current.setColorAt(i, finalColor)
+    }
+
+    if (meshRef.current.instanceColor) {
+      meshRef.current.instanceColor.needsUpdate = true
+    }
+  }, [podCount, hoveredInstanceId, selectedInstanceId, podMaterial])
 
   // Update material based on health with GSAP color transitions
   const colorTransitionRef = useRef<gsap.core.Timeline | null>(null)
@@ -184,15 +208,26 @@ export default function PodGrid() {
   }, [podHealth, podMaterial])
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, MAX_PODS]} position={[0, -1, 0]} name="podGrid" castShadow receiveShadow>
-      <boxGeometry args={[0.7, 0.7, 0.7]}>
-        <bufferAttribute
-          attach="attributes-position"
-          count={24}
-          array={new Float32Array(72)}
-          itemSize={3}
-        />
-      </boxGeometry>
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, MAX_PODS]}
+      position={[0, -1, 0]}
+      name="podGrid"
+      castShadow
+      receiveShadow
+      onPointerMove={(e) => {
+        // Only treat active pods as interactive
+        const id = typeof e.instanceId === 'number' ? e.instanceId : null
+        setHoveredInstanceId(id !== null && id < podCount ? id : null)
+      }}
+      onPointerOut={() => setHoveredInstanceId(null)}
+      onClick={(e) => {
+        const id = typeof e.instanceId === 'number' ? e.instanceId : null
+        if (id === null || id >= podCount) return
+        setSelectedInstanceId((prev) => (prev === id ? null : id))
+      }}
+    >
+      <boxGeometry args={[0.7, 0.7, 0.7]} />
       <primitive object={podMaterial} attach="material" />
     </instancedMesh>
   )

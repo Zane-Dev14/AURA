@@ -60,7 +60,7 @@ function FogController() {
 }
 
 export default function AuraDemo() {
-  const [dpr, setDpr] = useState(1.5)
+  const [dpr, setDpr] = useState(2) // M4 Max can handle 2x pixel ratio
   const { glitchIntensity, scene, unlockAudio: storeUnlockAudio } = useSceneStore()
 
   const handleFirstInteraction = () => {
@@ -93,31 +93,33 @@ export default function AuraDemo() {
       onKeyDown={handleFirstInteraction}
     >
       <Canvas
-        dpr={[1, dpr]}
+        dpr={[1.5, dpr]}
         gl={{
           antialias: true,
           powerPreference: 'high-performance',
-          toneMappingExposure: 1.2,
+          toneMappingExposure: 1.3,
           toneMapping: THREE.ACESFilmicToneMapping,
-          // Performance optimizations
+          // M4 Max optimizations
           alpha: false,
           stencil: false,
           depth: true,
+          logarithmicDepthBuffer: true, // Better depth precision
+          preserveDrawingBuffer: false,
         }}
-        shadows="soft"
+        shadows="percentage" // Higher quality shadows for M4 Max
         camera={{ position: [0, 8, 20], fov: 55, near: 0.1, far: 200 }}
         style={{ background: '#000' }}
-        frameloop="always" // Ensure smooth rendering
+        frameloop="always"
       >
         <FogController />
         <color attach="background" args={['#000205']} />
         
-        {/* Performance monitoring with adaptive quality */}
+        {/* Performance monitoring optimized for M4 Max */}
         <PerformanceMonitor
-          onDecline={() => setDpr(1)}
-          onIncline={() => setDpr(1.5)}
+          onDecline={() => setDpr(1.5)}
+          onIncline={() => setDpr(2)}
           flipflops={3}
-          factor={0.5}
+          factor={0.8}
         />
         
         {/* Suspense with proper fallback for smooth loading */}
@@ -133,31 +135,35 @@ export default function AuraDemo() {
                 : '/models/1082ab60-0925-4509-9e69-90a7dfce573c.hdr'
             }
             background
-            backgroundBlurriness={0}
-            backgroundIntensity={0.3}
-            environmentIntensity={2.0}
+            backgroundBlurriness={0.1}
+            backgroundIntensity={0.4}
+            environmentIntensity={2.5}
+            resolution={1024}
           />
           
-          {/* Optimized star count for better performance */}
-          <Stars radius={100} depth={80} count={3000} factor={4} fade speed={0.3} />
+          {/* Enhanced star count for M4 Max */}
+          <Stars radius={100} depth={80} count={5000} factor={5} fade speed={0.3} />
           
           <IntroSequence />
           <SceneManager />
           <SceneTransitionManager />
         </Suspense>
         
-        {/* Post-processing with optimized settings */}
-        <EffectComposer multisampling={4}>
+        {/* Post-processing optimized for M4 Max - higher quality */}
+        <EffectComposer multisampling={8} enabled={true}>
           <Bloom
-            intensity={bloomIntensity * 0.4}
-            luminanceThreshold={0.7}
-            luminanceSmoothing={0.9}
+            intensity={bloomIntensity * 0.5}
+            luminanceThreshold={0.6}
+            luminanceSmoothing={0.95}
             mipmapBlur
-            radius={0.8}
+            radius={0.9}
+            levels={8}
           />
           <ChromaticAberration
             blendFunction={BlendFunction.NORMAL}
             offset={new THREE.Vector2(chromaticOffset, chromaticOffset)}
+            radialModulation={true}
+            modulationOffset={0.5}
           />
           <Vignette
             eskil={false}

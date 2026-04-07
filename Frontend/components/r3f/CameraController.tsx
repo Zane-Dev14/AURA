@@ -25,10 +25,10 @@ const cameraPresets: Record<Scene, CameraPreset> = {
     mode: 'follow' 
   },
   system: { 
-    position: [5, 10, 18], 
-    lookAt: [0, 3, 0], 
-    fov: 55, 
-    mode: 'cinematic' 
+    position: [0, 8, 18], 
+    lookAt: [0, 2.5, 0], 
+    fov: 60, 
+    mode: 'follow' 
   },
   traffic: { 
     position: [0, 8, 20], 
@@ -79,7 +79,7 @@ const cameraPresets: Record<Scene, CameraPreset> = {
 }
 
 export default function CameraController() {
-  const { camera, scene: threeScene, pointer } = useThree()
+  const { camera, scene: threeScene } = useThree()
   const scene = useSceneStore((state) => state.scene)
   const introComplete = useSceneStore((state) => state.introComplete)
   
@@ -93,14 +93,14 @@ export default function CameraController() {
   const tweenRef = useRef<gsap.core.Tween | null>(null)
   const fovTweenRef = useRef<gsap.core.Tween | null>(null)
   const airshipVelocity = useRef(new THREE.Vector3())
+  const smoothedAirshipVelocity = useRef(new THREE.Vector3())
   const lastAirshipPosition = useRef(new THREE.Vector3(0, 2, 0))
   
   // Mouse drag rotation control
   const [isDragging, setIsDragging] = useState(false)
   const dragAngles = useRef({ horizontal: 0, vertical: 0 })
-  const defaultAngles = useRef({ horizontal: Math.PI, vertical: 0 }) // Behind airship
+  const defaultAngles = useRef({ horizontal: Math.PI, vertical: -0.15 }) // Slightly above/behind
   const lastMousePos = useRef({ x: 0, y: 0 })
-  const orbitDistance = useRef(20)
   
   // Airship reference for follow mode
   const airshipPosition = useRef(new THREE.Vector3(0, 2, 0))
@@ -171,6 +171,11 @@ export default function CameraController() {
   useEffect(() => {
     const preset = cameraPresets[scene]
     currentMode.current = preset.mode
+
+    if (preset.mode === 'follow') {
+      dragAngles.current.horizontal = defaultAngles.current.horizontal
+      dragAngles.current.vertical = defaultAngles.current.vertical
+    }
     
     // Kill existing tweens
     if (tweenRef.current) tweenRef.current.kill()
@@ -238,9 +243,19 @@ export default function CameraController() {
   // Frame-by-frame camera updates
   useFrame((state, delta) => {
     const preset = cameraPresets[scene]
+
+    const dt = Math.max(delta, 1 / 240)
+
+    // Pull airship transform directly in this frame to avoid update-order jitter.
+    const airship = threeScene.getObjectByName('airship')
+    if (airship) {
+      airshipPosition.current.copy(airship.position)
+    }
     
     // Calculate airship velocity for prediction
-    airshipVelocity.current.copy(airshipPosition.current).sub(lastAirshipPosition.current).divideScalar(delta)
+    airshipVelocity.current.copy(airshipPosition.current).sub(lastAirshipPosition.current).divideScalar(dt)
+    const velocitySmoothing = 1 - Math.exp(-10 * dt)
+    smoothedAirshipVelocity.current.lerp(airshipVelocity.current, velocitySmoothing)
     lastAirshipPosition.current.copy(airshipPosition.current)
     
     // Third-person camera with drag rotation (for follow mode after intro)
@@ -249,16 +264,18 @@ export default function CameraController() {
       const horizontalAngle = dragAngles.current.horizontal
       const verticalAngle = dragAngles.current.vertical
       
-      // Distance from airship
-      const distance = 12
+      // Scene 2 uses a larger world-scale model, so keep the camera farther back.
+      const distance = scene === 'system' ? 20 : 12
+      const baseHeight = scene === 'system' ? 8 : 3
+      const lookHeight = scene === 'system' ? 3 : 1
       
       // Convert spherical to cartesian coordinates
       const offsetX = distance * Math.cos(verticalAngle) * Math.sin(horizontalAngle)
-      const offsetY = 3 + distance * Math.sin(verticalAngle)
+      const offsetY = baseHeight + distance * Math.sin(verticalAngle)
       const offsetZ = distance * Math.cos(verticalAngle) * Math.cos(horizontalAngle)
       
       // Add velocity-based offset for cinematic lag
-      const velocityOffset = airshipVelocity.current.clone().multiplyScalar(-0.5)
+      const velocityOffset = smoothedAirshipVelocity.current.clone().multiplyScalar(-0.2)
       
       // Position camera relative to airship (follows airship movement)
       const targetPos = new THREE.Vector3(
@@ -266,17 +283,32 @@ export default function CameraController() {
         airshipPosition.current.y + offsetY + velocityOffset.y,
         airshipPosition.current.z + offsetZ + velocityOffset.z
       )
+
+      // Lock Scene 2 camera traversal to the model region.
+      if (scene === 'system') {
+        const bounds = { x: 16, yMin: 20, yMax: 36, z: 16 }
+        targetPos.x = THREE.MathUtils.clamp(targetPos.x, -bounds.x, bounds.x)
+        targetPos.y = THREE.MathUtils.clamp(targetPos.y, bounds.yMin, bounds.yMax)
+        targetPos.z = THREE.MathUtils.clamp(targetPos.z, -bounds.z, bounds.z)
+      }
       
-      // Frame-rate independent lerping for smooth camera follow
-      const lerpFactor = 1 - Math.pow(0.001, delta)
-      camera.position.lerp(targetPos, lerpFactor * 0.15)
+      // Frame-rate independent smoothing for stable follow motion.
+      const positionAlpha = 1 - Math.exp(-6 * dt)
+      camera.position.lerp(targetPos, positionAlpha)
       
       // Look ahead based on velocity for predictive camera
       const predictedPosition = airshipPosition.current.clone()
-        .add(airshipVelocity.current.clone().multiplyScalar(0.3))
+        .add(smoothedAirshipVelocity.current.clone().multiplyScalar(0.18))
       
       // Look at predicted position (slightly above center)
-      const lookTarget = predictedPosition.clone().add(new THREE.Vector3(0, 1, 0))
+      const lookTarget = predictedPosition.clone().add(new THREE.Vector3(0, lookHeight, 0))
+
+      if (scene === 'system') {
+        lookTarget.x = THREE.MathUtils.clamp(lookTarget.x, -14, 14)
+        lookTarget.y = THREE.MathUtils.clamp(lookTarget.y, 18, 34)
+        lookTarget.z = THREE.MathUtils.clamp(lookTarget.z, -14, 14)
+      }
+
       camera.lookAt(lookTarget)
       camera.updateMatrixWorld()
       return
@@ -347,16 +379,6 @@ export default function CameraController() {
     
     // Update camera matrix
     camera.updateMatrixWorld()
-  })
-  
-  // Listen for airship position updates (for follow mode)
-  useFrame(() => {
-    // This will be updated by Airship component or we can query the scene
-    // For now, we'll use a simple approach - the Airship will update this
-    const airship = threeScene.getObjectByName('airship')
-    if (airship) {
-      airshipPosition.current.copy(airship.position)
-    }
   })
   
   return null

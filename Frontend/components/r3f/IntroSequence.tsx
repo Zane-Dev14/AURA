@@ -171,8 +171,8 @@ export default function IntroSequence() {
         target-position={[0, 0, 0]}
       />
 
-      {/* Main AURA text */}
-      <group scale={textScale}>
+      {/* Main AURA text - positioned well above ground */}
+      <group position={[0, 3, 0]} scale={textScale}>
         <Text
           fontSize={4}
           color="#ffffff"
