@@ -173,12 +173,28 @@ export default function ComparisonScene() {
         Source: docs/Final Results (combined_hpa.json, combined_qmix.json)
       </Text>
 
+      <mesh position={[-7.2, 1, -1.2]}>
+        <planeGeometry args={[7.8, 7.2]} />
+        <meshBasicMaterial color="#ff4400" transparent opacity={0.06} />
+      </mesh>
+      <mesh position={[7.2, 1, -1.2]}>
+        <planeGeometry args={[7.8, 7.2]} />
+        <meshBasicMaterial color="#00ccff" transparent opacity={0.07} />
+      </mesh>
+
       <Text position={[-7.2, 5, 0]} fontSize={0.46} color="#ff4400" anchorX="center" anchorY="middle">
         HPA
       </Text>
       <Text position={[7.2, 5, 0]} fontSize={0.46} color="#00ccff" anchorX="center" anchorY="middle">
         QMix
       </Text>
+
+      <MetricDisplay
+        position={[-7.2, 3.5, 0]}
+        label="Avg Replicas (All Services)"
+        value={FINAL_RESULTS.hpa.avgReplicasTotal.toFixed(2)}
+        color="#ff4400"
+      />
 
       <MetricDisplay
         position={[7.2, 3.5, 0]}
@@ -188,13 +204,13 @@ export default function ComparisonScene() {
       />
 
       <MetricDisplay
-        position={[-7.2, -3, 0]}
+        position={[-7.2, -2.45, 0]}
         label="CPU Requested (cores)"
         value={FINAL_RESULTS.hpa.cpuRequestedCores.toFixed(2)}
         color="#ff4400"
       />
       <MetricDisplay
-        position={[7.2, -3, 0]}
+        position={[7.2, -2.45, 0]}
         label="CPU Requested (cores)"
         value={FINAL_RESULTS.qmix.cpuRequestedCores.toFixed(2)}
         color="#00ccff"
