@@ -1,57 +1,48 @@
 'use client'
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useSceneStore } from '@/store/useSceneStore'
 import { Text } from '@react-three/drei'
 import * as THREE from 'three'
-import ComparisonSlider from '@/components/r3f/ComparisonSlider'
 
-// Mini pod for comparison side with clipping
+const FINAL_RESULTS = {
+  hpa: {
+    avgReplicasTotal: 6.93,
+    cpuRequestedCores: 2.0,
+    apiP99Ms: 99.87,
+  },
+  qmix: {
+    avgReplicasTotal: 5.76,
+    cpuRequestedCores: 0.9,
+    apiP99Ms: 23.13,
+  },
+}
+
 function MiniPodGrid({
   side,
   podCount,
   health,
-  sliderPosition
 }: {
   side: 'left' | 'right'
   podCount: number
   health: number
-  sliderPosition: number
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null)
   const dummy = useMemo(() => new THREE.Object3D(), [])
-  const color = health > 0.5 ? new THREE.Color(0x00ff66) : new THREE.Color(0xff2200)
-  
-  // Create clipping plane
-  const clippingPlane = useMemo(() => {
-    if (side === 'left') {
-      // Left side: clip when slider moves right (positive x)
-      return new THREE.Plane(new THREE.Vector3(1, 0, 0), 0)
-    } else {
-      // Right side: clip when slider moves left (negative x)
-      return new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0)
-    }
-  }, [side])
+  const color = health > 0.5 ? new THREE.Color(0x00ff66) : new THREE.Color(0xff5500)
+  const xOffset = side === 'left' ? -7.2 : 7.2
 
   useFrame((state) => {
     if (!meshRef.current) return
-    
-    // Update clipping plane based on slider position
-    if (side === 'left') {
-      clippingPlane.constant = sliderPosition
-    } else {
-      clippingPlane.constant = -sliderPosition
-    }
-    
-    const xOffset = side === 'left' ? -9 : 9
+
     for (let i = 0; i < 10; i++) {
       const scale = i < podCount ? 1 : 0.01
       dummy.position.set(
-        xOffset + (i % 5) * 1.8 - 3.6,
+        xOffset + (i % 5) * 1.45 - 2.9,
         -1 + Math.sin(state.clock.elapsedTime + i) * 0.05,
-        (Math.floor(i / 5)) * 1.8 - 0.9
+        Math.floor(i / 5) * 1.45 - 0.72
       )
-      dummy.scale.setScalar(scale * 0.7)
+      dummy.scale.setScalar(scale * 0.68)
       dummy.updateMatrix()
       meshRef.current.setMatrixAt(i, dummy.matrix)
     }
@@ -61,78 +52,45 @@ function MiniPodGrid({
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, 10]}>
       <boxGeometry args={[0.6, 0.6, 0.6]} />
-      <meshStandardMaterial
-        color={color}
-        emissive={color}
-        emissiveIntensity={0.5}
-        clippingPlanes={[clippingPlane]}
-        clipShadows
-      />
+      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} />
     </instancedMesh>
   )
 }
 
-// Particles for each side with clipping
-function ComparisonParticles({
-  side,
-  active,
-  sliderPosition
-}: {
-  side: 'left' | 'right'
-  active: boolean
-  sliderPosition: number
-}) {
+function ComparisonParticles({ side, active }: { side: 'left' | 'right'; active: boolean }) {
   const pointsRef = useRef<THREE.Points>(null)
-  const xOffset = side === 'left' ? -9 : 9
-  const isHPA = side === 'left'
+  const xOffset = side === 'left' ? -7.2 : 7.2
+  const isHpa = side === 'left'
 
   const positions = useMemo(() => {
     const arr = new Float32Array(200 * 3)
     for (let i = 0; i < 200; i++) {
-      arr[i * 3] = xOffset + (Math.random() - 0.5) * 8
+      arr[i * 3] = xOffset + (Math.random() - 0.5) * 6.6
       arr[i * 3 + 1] = Math.random() * 4 - 2
-      arr[i * 3 + 2] = (Math.random() - 0.5) * 6
+      arr[i * 3 + 2] = (Math.random() - 0.5) * 5
     }
     return arr
   }, [xOffset])
-  
-  // Create clipping plane
-  const clippingPlane = useMemo(() => {
-    if (side === 'left') {
-      return new THREE.Plane(new THREE.Vector3(1, 0, 0), 0)
-    } else {
-      return new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0)
-    }
-  }, [side])
 
-  useFrame((state, delta) => {
+  useFrame((_, delta) => {
     if (!pointsRef.current || !active) return
-    
-    // Update clipping plane
-    if (side === 'left') {
-      clippingPlane.constant = sliderPosition
-    } else {
-      clippingPlane.constant = -sliderPosition
-    }
-    
+
     const pos = pointsRef.current.geometry.attributes.position.array as Float32Array
     for (let i = 0; i < 200; i++) {
       const idx = i * 3
-      if (isHPA) {
-        // Pile up — converge but not flow through
+      if (isHpa) {
         pos[idx] += (xOffset - pos[idx]) * 0.01
-        pos[idx + 1] = Math.max(-1.5, pos[idx + 1] - delta * 0.3)
+        pos[idx + 1] = Math.max(-1.5, pos[idx + 1] - delta * 0.32)
         if (pos[idx + 1] < -1.5) {
           pos[idx + 1] = 3
-          pos[idx] = xOffset + (Math.random() - 0.5) * 8
+          pos[idx] = xOffset + (Math.random() - 0.5) * 6.6
         }
       } else {
-        // Flow smoothly toward service
         pos[idx] += (xOffset * 0.5 - pos[idx]) * 0.02
-        pos[idx + 1] -= delta * 0.8
+        pos[idx + 1] -= delta * 0.82
         if (pos[idx + 1] < -2) {
           pos[idx + 1] = 3
-          pos[idx] = xOffset + (Math.random() - 0.5) * 8
+          pos[idx] = xOffset + (Math.random() - 0.5) * 6.6
         }
       }
     }
@@ -146,51 +104,33 @@ function ComparisonParticles({
       </bufferGeometry>
       <pointsMaterial
         size={0.08}
-        color={isHPA ? '#ff4400' : '#00ccff'}
+        color={isHpa ? '#ff4400' : '#00ccff'}
         transparent
-        opacity={active ? 0.7 : 0.2}
+        opacity={active ? 0.75 : 0.2}
         sizeAttenuation
         depthWrite={false}
-        clippingPlanes={[clippingPlane]}
       />
     </points>
   )
 }
 
-// Metric display
 function MetricDisplay({
   position,
   label,
   value,
   color,
-  opacity = 1
 }: {
   position: [number, number, number]
   label: string
   value: string
   color: string
-  opacity?: number
 }) {
   return (
     <group position={position}>
-      <Text
-        position={[0, 0.3, 0]}
-        fontSize={0.3}
-        color="#ffffff"
-        anchorX="center"
-        anchorY="middle"
-        fillOpacity={opacity}
-      >
+      <Text position={[0, 0.3, 0]} fontSize={0.29} color="#ffffff" anchorX="center" anchorY="middle">
         {label}
       </Text>
-      <Text
-        position={[0, -0.3, 0]}
-        fontSize={0.5}
-        color={color}
-        anchorX="center"
-        anchorY="middle"
-        fillOpacity={opacity}
-      >
+      <Text position={[0, -0.3, 0]} fontSize={0.5} color={color} anchorX="center" anchorY="middle">
         {value}
       </Text>
     </group>
@@ -198,164 +138,121 @@ function MetricDisplay({
 }
 
 export default function ComparisonScene() {
-  const { camera, gl } = useThree()
-  const { setAirshipState } = useSceneStore()
-  const [sliderPosition, setSliderPosition] = useState(0)
-  const [showInstructions, setShowInstructions] = useState(true)
+  const { camera } = useThree()
+  const { setAirshipState, setMetrics } = useSceneStore()
 
   useEffect(() => {
     setAirshipState('stable')
-    
-    // Enable local clipping
-    gl.localClippingEnabled = true
-    
-    // Hide instructions after 5 seconds
-    setTimeout(() => setShowInstructions(false), 5000)
-    
-    return () => {
-      gl.localClippingEnabled = false
-    }
-  }, [gl, setAirshipState])
+    setMetrics({
+      failures: 21,
+      pods: Math.round(FINAL_RESULTS.qmix.avgReplicasTotal),
+      latencyMs: Math.round(FINAL_RESULTS.qmix.apiP99Ms),
+      cpuPercent: 11,
+      rps: 663,
+    })
+  }, [setAirshipState, setMetrics])
 
   useFrame(() => {
-    camera.position.x = THREE.MathUtils.lerp(camera.position.x, 0, 0.02)
-    camera.position.y = THREE.MathUtils.lerp(camera.position.y, 8, 0.02)
-    camera.position.z = THREE.MathUtils.lerp(camera.position.z, 25, 0.02)
+    camera.position.x = THREE.MathUtils.lerp(camera.position.x, 0, 0.03)
+    camera.position.y = THREE.MathUtils.lerp(camera.position.y, 8, 0.03)
+    camera.position.z = THREE.MathUtils.lerp(camera.position.z, 23, 0.03)
     camera.lookAt(0, 0, 0)
   })
-  
-  // Calculate opacity based on slider position for fade effect
-  const leftOpacity = THREE.MathUtils.clamp(1 - (sliderPosition + 10) / 20, 0.3, 1)
-  const rightOpacity = THREE.MathUtils.clamp(1 - (10 - sliderPosition) / 20, 0.3, 1)
 
   return (
     <>
-      <ambientLight intensity={0.4} />
+      <ambientLight intensity={0.42} />
       <directionalLight position={[0, 10, 5]} intensity={1.2} />
-      <pointLight position={[-9, 4, 0]} intensity={2} color="#ff4400" />
-      <pointLight position={[9, 4, 0]} intensity={2} color="#00ccff" />
-      
-      {/* Instructions */}
-      {showInstructions && (
-        <Text
-          position={[0, 9, 0]}
-          fontSize={0.4}
-          color="#ffffff"
-          anchorX="center"
-          anchorY="middle"
-        >
-          Drag the slider to compare HPA vs QMix
-        </Text>
-      )}
-      
-      {/* Title */}
-      <Text
-        position={[0, 7, 0]}
-        fontSize={0.6}
-        color="#00ffff"
-        anchorX="center"
-        anchorY="middle"
-      >
+      <pointLight position={[-7.2, 4, 0]} intensity={2.1} color="#ff4400" />
+      <pointLight position={[7.2, 4, 0]} intensity={2.1} color="#00ccff" />
+
+      <Text position={[0, 7, 0]} fontSize={0.6} color="#00ffff" anchorX="center" anchorY="middle">
         Performance Comparison
       </Text>
-      
-      {/* Side labels */}
-      <Text
-        position={[-9, 5, 0]}
-        fontSize={0.5}
-        color="#ff4400"
-        anchorX="center"
-        anchorY="middle"
-        fillOpacity={leftOpacity}
-      >
-        HPA (Slow)
+      <Text position={[0, 6.35, 0]} fontSize={0.22} color="#cceeff" anchorX="center" anchorY="middle">
+        Source: docs/Final Results (combined_hpa.json, combined_qmix.json)
       </Text>
-      <Text
-        position={[9, 5, 0]}
-        fontSize={0.5}
-        color="#00ccff"
-        anchorX="center"
-        anchorY="middle"
-        fillOpacity={rightOpacity}
-      >
-        QMix (Fast)
+
+      <mesh position={[-7.2, 1, -1.2]}>
+        <planeGeometry args={[7.8, 7.2]} />
+        <meshBasicMaterial color="#ff4400" transparent opacity={0.06} />
+      </mesh>
+      <mesh position={[7.2, 1, -1.2]}>
+        <planeGeometry args={[7.8, 7.2]} />
+        <meshBasicMaterial color="#00ccff" transparent opacity={0.07} />
+      </mesh>
+
+      <Text position={[-7.2, 5, 0]} fontSize={0.46} color="#ff4400" anchorX="center" anchorY="middle">
+        HPA
       </Text>
-      
-      {/* Metrics */}
+      <Text position={[7.2, 5, 0]} fontSize={0.46} color="#00ccff" anchorX="center" anchorY="middle">
+        QMix
+      </Text>
+
       <MetricDisplay
-        position={[-9, 3.5, 0]}
-        label="Scale Time"
-        value="~4s"
+        position={[-7.2, 3.5, 0]}
+        label="Avg Replicas (All Services)"
+        value={FINAL_RESULTS.hpa.avgReplicasTotal.toFixed(2)}
         color="#ff4400"
-        opacity={leftOpacity}
-      />
-      <MetricDisplay
-        position={[9, 3.5, 0]}
-        label="Scale Time"
-        value="~0.5s"
-        color="#00ccff"
-        opacity={rightOpacity}
-      />
-      
-      <MetricDisplay
-        position={[-9, -3, 0]}
-        label="Pods"
-        value="2/10"
-        color="#ff4400"
-        opacity={leftOpacity}
-      />
-      <MetricDisplay
-        position={[9, -3, 0]}
-        label="Pods"
-        value="9/10"
-        color="#00ccff"
-        opacity={rightOpacity}
       />
 
-      {/* HPA side (left) - Always rendered */}
-      <MiniPodGrid side="left" podCount={2} health={0.2} sliderPosition={sliderPosition} />
-      <ComparisonParticles side="left" active={true} sliderPosition={sliderPosition} />
+      <MetricDisplay
+        position={[7.2, 3.5, 0]}
+        label="Avg Replicas (All Services)"
+        value={FINAL_RESULTS.qmix.avgReplicasTotal.toFixed(2)}
+        color="#00ccff"
+      />
 
-      {/* QMix side (right) - Always rendered */}
-      <MiniPodGrid side="right" podCount={9} health={1} sliderPosition={sliderPosition} />
-      <ComparisonParticles side="right" active={true} sliderPosition={sliderPosition} />
-      
-      {/* Comparison Slider */}
-      <ComparisonSlider onPositionChange={setSliderPosition} />
-      
-      {/* Grid floor */}
+      <MetricDisplay
+        position={[-7.2, -2.45, 0]}
+        label="CPU Requested (cores)"
+        value={FINAL_RESULTS.hpa.cpuRequestedCores.toFixed(2)}
+        color="#ff4400"
+      />
+      <MetricDisplay
+        position={[7.2, -2.45, 0]}
+        label="CPU Requested (cores)"
+        value={FINAL_RESULTS.qmix.cpuRequestedCores.toFixed(2)}
+        color="#00ccff"
+      />
+
+      <MetricDisplay
+        position={[-7.2, 1.1, 0]}
+        label="API p99 (ms)"
+        value={FINAL_RESULTS.hpa.apiP99Ms.toFixed(2)}
+        color="#ff4400"
+      />
+      <MetricDisplay
+        position={[7.2, 1.1, 0]}
+        label="API p99 (ms)"
+        value={FINAL_RESULTS.qmix.apiP99Ms.toFixed(2)}
+        color="#00ccff"
+      />
+
+      <Text position={[0, -0.95, 0]} fontSize={0.3} color="#9fe8ff" anchorX="center" anchorY="middle">
+        QMix strengths: API p99 23.13ms vs HPA 99.87ms, with lower requested CPU (0.90 vs 2.00 cores)
+      </Text>
+
+      <MiniPodGrid side="left" podCount={7} health={0.35} />
+      <ComparisonParticles side="left" active={true} />
+
+      <MiniPodGrid side="right" podCount={6} health={1} />
+      <ComparisonParticles side="right" active={true} />
+
       <mesh position={[0, -6, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[40, 30, 20, 15]} />
-        <meshBasicMaterial
-          color="#0088ff"
-          transparent
-          opacity={0.1}
-          wireframe
-        />
+        <meshBasicMaterial color="#0088ff" transparent opacity={0.1} wireframe />
       </mesh>
-      
-      {/* Highlight zones with fade */}
-      <mesh position={[-9, 0, 0]}>
-        <boxGeometry args={[10, 10, 8]} />
-        <meshBasicMaterial
-          color="#ff4400"
-          transparent
-          opacity={0.05 * leftOpacity}
-          wireframe
-        />
+
+      <mesh position={[-7.2, 0, 0]}>
+        <boxGeometry args={[8.5, 10, 8]} />
+        <meshBasicMaterial color="#ff4400" transparent opacity={0.06} wireframe />
       </mesh>
-      
-      <mesh position={[9, 0, 0]}>
-        <boxGeometry args={[10, 10, 8]} />
-        <meshBasicMaterial
-          color="#00ccff"
-          transparent
-          opacity={0.05 * rightOpacity}
-          wireframe
-        />
+
+      <mesh position={[7.2, 0, 0]}>
+        <boxGeometry args={[8.5, 10, 8]} />
+        <meshBasicMaterial color="#00ccff" transparent opacity={0.06} wireframe />
       </mesh>
     </>
   )
 }
-
-// Made with Bob

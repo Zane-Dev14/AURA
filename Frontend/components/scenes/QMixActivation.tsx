@@ -202,7 +202,7 @@ function ActivationCore({ progress }: { progress: number }) {
 
 export default function QMixActivation() {
   const { camera } = useThree()
-  const { setAirshipState, setGlitchIntensity, setScene } = useSceneStore()
+  const { demoMode, setAirshipState, setGlitchIntensity, setQmixPid, setQmixStatusMsg, setScene } = useSceneStore()
   const [activatedButtons, setActivatedButtons] = useState<number[]>([])
   const [showInstructions, setShowInstructions] = useState(true)
   const transitionTriggered = useRef(false)
@@ -222,12 +222,41 @@ export default function QMixActivation() {
     // When all buttons activated, transition
     if (activatedButtons.length === totalButtons && !transitionTriggered.current) {
       transitionTriggered.current = true
-      setGlitchIntensity(0)
-      setTimeout(() => {
-        setScene('transform')
-      }, 3000)
+
+      const startController = async () => {
+        setQmixStatusMsg('Bootstrapping AURA controller...')
+        if (!demoMode) {
+          try {
+            const res = await fetch('/api/start-qmix', { method: 'POST' })
+            const data = await res.json()
+            if (typeof data?.pid === 'number') {
+              setQmixPid(data.pid)
+            }
+            setQmixStatusMsg('AURA controller active')
+          } catch {
+            setQmixStatusMsg('Controller start failed')
+          }
+        } else {
+          setQmixPid(99999)
+          setQmixStatusMsg('Demo controller active')
+        }
+
+        setGlitchIntensity(0)
+        setTimeout(() => {
+          setScene('transform')
+        }, 3000)
+      }
+
+      void startController()
     }
-  }, [activatedButtons.length, setScene, setGlitchIntensity])
+  }, [
+    activatedButtons.length,
+    demoMode,
+    setGlitchIntensity,
+    setQmixPid,
+    setQmixStatusMsg,
+    setScene,
+  ])
 
   useFrame((_, delta) => {
     camera.position.x = THREE.MathUtils.lerp(camera.position.x, 0, 0.02)
@@ -267,7 +296,7 @@ export default function QMixActivation() {
           anchorX="center"
           anchorY="middle"
         >
-          Activate all 4 nodes to initialize QMix
+          Activate all 4 agent nodes to start the real controller
         </Text>
       )}
       

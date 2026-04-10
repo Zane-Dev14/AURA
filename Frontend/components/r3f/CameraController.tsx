@@ -25,8 +25,8 @@ const cameraPresets: Record<Scene, CameraPreset> = {
     mode: 'follow' 
   },
   system: { 
-    position: [0, 8, 18], 
-    lookAt: [0, 2.5, 0], 
+    position: [-22, 34, 0], 
+    lookAt: [8, 31.5, 0], 
     fov: 60, 
     mode: 'follow' 
   },
@@ -88,6 +88,7 @@ export default function CameraController() {
   const targetPosition = useRef(new THREE.Vector3())
   const targetLookAt = useRef(new THREE.Vector3())
   const currentLookAt = useRef(new THREE.Vector3())
+  const followLookAt = useRef(new THREE.Vector3())
   const orbitAngle = useRef(0)
   const shakeOffset = useRef(new THREE.Vector3())
   const tweenRef = useRef<gsap.core.Tween | null>(null)
@@ -100,6 +101,7 @@ export default function CameraController() {
   const [isDragging, setIsDragging] = useState(false)
   const dragAngles = useRef({ horizontal: 0, vertical: 0 })
   const defaultAngles = useRef({ horizontal: Math.PI, vertical: -0.15 }) // Slightly above/behind
+  const followDistance = useRef(14)
   const lastMousePos = useRef({ x: 0, y: 0 })
   
   // Airship reference for follow mode
@@ -109,6 +111,7 @@ export default function CameraController() {
   useEffect(() => {
     const preset = cameraPresets[scene]
     currentLookAt.current.set(...preset.lookAt)
+    followLookAt.current.set(...preset.lookAt)
   }, [])
 
   // Mouse drag handlers for camera rotation
@@ -169,12 +172,22 @@ export default function CameraController() {
   
   // Handle scene changes with smooth GSAP transitions
   useEffect(() => {
+    if (scene === 'calm' && !introComplete) return
+
     const preset = cameraPresets[scene]
     currentMode.current = preset.mode
 
     if (preset.mode === 'follow') {
-      dragAngles.current.horizontal = defaultAngles.current.horizontal
-      dragAngles.current.vertical = defaultAngles.current.vertical
+      if (scene === 'system') {
+        // Start camera behind ship while looking toward model top center.
+        dragAngles.current.horizontal = -Math.PI / 2
+        dragAngles.current.vertical = -0.02
+        followDistance.current = 18
+      } else {
+        dragAngles.current.horizontal = defaultAngles.current.horizontal
+        dragAngles.current.vertical = defaultAngles.current.vertical
+        followDistance.current = 14
+      }
     }
     
     // Kill existing tweens
@@ -238,10 +251,13 @@ export default function CameraController() {
       if (tweenRef.current) tweenRef.current.kill()
       if (fovTweenRef.current) fovTweenRef.current.kill()
     }
-  }, [scene, camera])
+  }, [scene, camera, introComplete])
   
   // Frame-by-frame camera updates
   useFrame((state, delta) => {
+    // Prevent intro camera snapping: do not apply controller updates until intro ends.
+    if (!introComplete && scene === 'calm') return
+
     const preset = cameraPresets[scene]
 
     const dt = Math.max(delta, 1 / 240)
@@ -264,10 +280,9 @@ export default function CameraController() {
       const horizontalAngle = dragAngles.current.horizontal
       const verticalAngle = dragAngles.current.vertical
       
-      // Scene 2 uses a larger world-scale model, so keep the camera farther back.
-      const distance = scene === 'system' ? 20 : 12
-      const baseHeight = scene === 'system' ? 8 : 3
-      const lookHeight = scene === 'system' ? 3 : 1
+      const distance = scene === 'system' ? followDistance.current : followDistance.current
+      const baseHeight = scene === 'system' ? 10 : 3
+      const lookHeight = scene === 'system' ? 4 : 1
       
       // Convert spherical to cartesian coordinates
       const offsetX = distance * Math.cos(verticalAngle) * Math.sin(horizontalAngle)
@@ -275,7 +290,7 @@ export default function CameraController() {
       const offsetZ = distance * Math.cos(verticalAngle) * Math.cos(horizontalAngle)
       
       // Add velocity-based offset for cinematic lag
-      const velocityOffset = smoothedAirshipVelocity.current.clone().multiplyScalar(-0.2)
+      const velocityOffset = smoothedAirshipVelocity.current.clone().multiplyScalar(-0.12)
       
       // Position camera relative to airship (follows airship movement)
       const targetPos = new THREE.Vector3(
@@ -286,7 +301,7 @@ export default function CameraController() {
 
       // Lock Scene 2 camera traversal to the model region.
       if (scene === 'system') {
-        const bounds = { x: 16, yMin: 20, yMax: 36, z: 16 }
+        const bounds = { x: 16, yMin: 30, yMax: 47, z: 16 }
         targetPos.x = THREE.MathUtils.clamp(targetPos.x, -bounds.x, bounds.x)
         targetPos.y = THREE.MathUtils.clamp(targetPos.y, bounds.yMin, bounds.yMax)
         targetPos.z = THREE.MathUtils.clamp(targetPos.z, -bounds.z, bounds.z)
@@ -298,26 +313,28 @@ export default function CameraController() {
       
       // Look ahead based on velocity for predictive camera
       const predictedPosition = airshipPosition.current.clone()
-        .add(smoothedAirshipVelocity.current.clone().multiplyScalar(0.18))
+        .add(smoothedAirshipVelocity.current.clone().multiplyScalar(0.12))
       
       // Look at predicted position (slightly above center)
       const lookTarget = predictedPosition.clone().add(new THREE.Vector3(0, lookHeight, 0))
 
       if (scene === 'system') {
-        lookTarget.x = THREE.MathUtils.clamp(lookTarget.x, -14, 14)
-        lookTarget.y = THREE.MathUtils.clamp(lookTarget.y, 18, 34)
-        lookTarget.z = THREE.MathUtils.clamp(lookTarget.z, -14, 14)
+        lookTarget.x = THREE.MathUtils.clamp(lookTarget.x, -10, 10)
+        lookTarget.y = THREE.MathUtils.clamp(lookTarget.y, 30, 42)
+        lookTarget.z = THREE.MathUtils.clamp(lookTarget.z, -10, 10)
       }
 
-      camera.lookAt(lookTarget)
+      const lookAlpha = 1 - Math.exp(-8 * dt)
+      followLookAt.current.lerp(lookTarget, lookAlpha)
+      camera.lookAt(followLookAt.current)
       camera.updateMatrixWorld()
       return
     }
     
     // Camera shake for dramatic scenes
     if (preset.shake) {
-      const shakeIntensity = scene === 'failure' ? 0.08 : 0.05
-      const shakeSpeed = scene === 'failure' ? 15 : 10
+      const shakeIntensity = scene === 'failure' ? 0.03 : 0.02
+      const shakeSpeed = scene === 'failure' ? 10 : 7
       
       shakeOffset.current.set(
         Math.sin(state.clock.elapsedTime * shakeSpeed) * shakeIntensity,

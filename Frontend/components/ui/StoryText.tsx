@@ -20,8 +20,8 @@ const STORY_TEXT: Record<string, { title: string; subtitle: string; description?
   },
   failure: {
     title: 'System Overload',
-    subtitle: 'HPA Scaling Too Slow',
-    description: 'Pods failing under pressure - 4 seconds per pod'
+    subtitle: 'HPA Did Not Scale At All',
+    description: 'Autoscaler stalled at 1 pod under peak pressure'
   },
   emotional: {
     title: 'Critical Failure',
@@ -46,7 +46,7 @@ const STORY_TEXT: Record<string, { title: string; subtitle: string; description?
   comparison: {
     title: 'The Difference',
     subtitle: 'HPA vs QMix Performance',
-    description: 'Toggle to compare approaches'
+    description: 'Final Results snapshot: QMix API p99 23.13ms vs HPA 99.87ms, while requesting less CPU (0.90 vs 2.00 cores)'
   }
 }
 

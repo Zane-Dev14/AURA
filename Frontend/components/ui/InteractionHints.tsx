@@ -55,15 +55,17 @@ export default function InteractionHints() {
   if (!introComplete) return null
 
   return (
-    <AnimatePresence>
-      {showHints && (
-        <motion.div
-          className="interaction-hints"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 1 }}
-        >
+    <>
+      <AnimatePresence>
+        {showHints && (
+          <motion.div
+            key="interaction-hints"
+            className="interaction-hints"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1 }}
+          >
           {/* WASD hint */}
           <motion.div
             className="hint hint-wasd"
@@ -105,21 +107,9 @@ export default function InteractionHints() {
             <span className="hint-text">Scroll to Zoom</span>
           </motion.div>
 
-          {/* Skip hint (for intro) */}
-          {!introComplete && (
-            <motion.div
-              className="hint hint-skip"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ delay: 2, duration: 0.8 }}
-            >
-              <span className="hint-text">Press SPACE to skip intro</span>
-            </motion.div>
-          )}
-        </motion.div>
-      )}
-
+          </motion.div>
+        )}
+      </AnimatePresence>
       <style jsx>{`
         .interaction-hints {
           position: fixed;
@@ -208,7 +198,7 @@ export default function InteractionHints() {
           }
         }
       `}</style>
-    </AnimatePresence>
+    </>
   )
 }
 

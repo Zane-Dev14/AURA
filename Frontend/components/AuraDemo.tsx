@@ -1,7 +1,7 @@
 'use client'
 import { Canvas } from '@react-three/fiber'
 import { Environment, PerformanceMonitor, Preload, Stars } from '@react-three/drei'
-import { Suspense, useState, useEffect, useRef, lazy } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { EffectComposer, Bloom, ChromaticAberration, Vignette } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
 import * as THREE from 'three'
@@ -11,13 +11,12 @@ import FilmGrainOverlay from './ui/FilmGrainOverlay'
 import InteractionHints from './ui/InteractionHints'
 import StoryText from './ui/StoryText'
 import { unlockAudio } from '@/lib/sound'
-
-// Lazy load heavy components for better initial performance
-const SceneManager = lazy(() => import('./SceneManager'))
-const SceneHUD = lazy(() => import('./ui/SceneHUD'))
-const LightingRig = lazy(() => import('./r3f/LightingRig'))
-const SceneTransitionManager = lazy(() => import('./r3f/SceneTransitionManager'))
-const IntroSequence = lazy(() => import('./r3f/IntroSequence'))
+import type { Scene } from '@/store/useSceneStore'
+import SceneManager from './SceneManager'
+import SceneHUD from './ui/SceneHUD'
+import LightingRig from './r3f/LightingRig'
+import SceneTransitionManager from './r3f/SceneTransitionManager'
+import IntroSequence from './r3f/IntroSequence'
 
 // Fog presets per scene for atmospheric depth
 const fogPresets: Record<string, { color: string; density: number }> = {
@@ -57,6 +56,69 @@ function FogController() {
   const initialPreset = fogPresets[useSceneStore.getState().scene] || fogPresets.calm
 
   return <fogExp2 ref={fogRef} attach="fog" args={[initialPreset.color, initialPreset.density]} />
+}
+
+const sceneAudioMap: Record<Scene, string> = {
+  calm: '/audio/calmMusic.mp3',
+  system: '/audio/kubernetesScene.mp3',
+  traffic: '/audio/kubernetesScene.mp3',
+  failure: '/audio/criticalState.mp3',
+  emotional: '/audio/criticalState.mp3',
+  qmix: '/audio/qmixReady.mp3',
+  transform: '/audio/qmixReady.mp3',
+  recovery: '/audio/successFinal.mp3',
+  comparison: '/audio/successFinal.mp3',
+}
+
+function SceneAudioManager() {
+  const scene = useSceneStore((state) => state.scene)
+  const audioUnlocked = useSceneStore((state) => state.audioUnlocked)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    if (!audioRef.current) {
+      const audio = new Audio()
+      audio.loop = true
+      audio.preload = 'auto'
+      audio.volume = 0.42
+      audioRef.current = audio
+    }
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ''
+        audioRef.current = null
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    if (!audioUnlocked) {
+      audio.pause()
+      return
+    }
+
+    const nextSrc = sceneAudioMap[scene]
+    if (!nextSrc) return
+
+    if (!audio.src.endsWith(nextSrc)) {
+      audio.src = nextSrc
+      audio.currentTime = 0
+    }
+
+    const playPromise = audio.play()
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {
+        // Browser autoplay policy can still block before a valid interaction.
+      })
+    }
+  }, [audioUnlocked, scene])
+
+  return null
 }
 
 export default function AuraDemo() {
@@ -122,32 +184,29 @@ export default function AuraDemo() {
           factor={0.8}
         />
         
-        {/* Suspense with proper fallback for smooth loading */}
-        <Suspense fallback={null}>
-          {/* Preload all assets FIRST for smooth intro transition */}
-          <Preload all />
-          
-          <LightingRig />
-          <Environment
-            files={
-              scene === 'recovery' || scene === 'comparison'
-                ? '/models/spruit_sunrise_4k.exr'
-                : '/models/1082ab60-0925-4509-9e69-90a7dfce573c.hdr'
-            }
-            background
-            backgroundBlurriness={0.1}
-            backgroundIntensity={0.4}
-            environmentIntensity={2.5}
-            resolution={1024}
-          />
-          
-          {/* Enhanced star count for M4 Max */}
-          <Stars radius={100} depth={80} count={5000} factor={5} fade speed={0.3} />
-          
-          <IntroSequence />
-          <SceneManager />
-          <SceneTransitionManager />
-        </Suspense>
+        {/* Preload all assets FIRST for smooth intro transition */}
+        <Preload all />
+        
+        <LightingRig />
+        <Environment
+          files={
+            scene === 'recovery' || scene === 'comparison'
+              ? '/models/spruit_sunrise_4k.exr'
+              : '/models/1082ab60-0925-4509-9e69-90a7dfce573c.hdr'
+          }
+          background
+          backgroundBlurriness={0.1}
+          backgroundIntensity={0.4}
+          environmentIntensity={2.5}
+          resolution={1024}
+        />
+        
+        {/* Enhanced star count for M4 Max */}
+        <Stars radius={100} depth={80} count={5000} factor={5} fade speed={0.3} />
+        
+        <IntroSequence />
+        <SceneManager />
+        <SceneTransitionManager />
         
         {/* Post-processing optimized for M4 Max - higher quality */}
         <EffectComposer multisampling={8} enabled={true}>
@@ -174,15 +233,12 @@ export default function AuraDemo() {
       </Canvas>
       
       <LoadingGate />
-      
-      {/* Lazy load UI components */}
-      <Suspense fallback={null}>
-        <SceneHUD />
-      </Suspense>
+      <SceneHUD />
       
       <StoryText />
       <FilmGrainOverlay />
       <InteractionHints />
+      <SceneAudioManager />
     </div>
   )
 }
