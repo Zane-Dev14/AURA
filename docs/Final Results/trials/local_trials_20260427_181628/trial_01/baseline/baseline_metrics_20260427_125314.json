@@ -1,0 +1,281 @@
+{
+  "timestamp": "2026-04-27T12:53:14Z",
+  "mode": "baseline",
+  "cluster_context": "k3d-aura",
+  "test_duration_minutes": 6,
+  "collection_window": {
+    "start": "2026-04-27T12:47:14Z",
+    "end": "2026-04-27T12:53:14Z"
+  },
+  "cluster_hardware": {
+    "node_count": 4,
+    "cpu_per_node_cores": 4.0,
+    "memory_per_node_gb": 6.66,
+    "allocatable_cpu_total_cores": 16.0,
+    "allocatable_memory_total_gb": 26.62
+  },
+  "resource_requests": {
+    "total_cpu_requested_cores": 0.6,
+    "total_memory_requested_gb": 1.25,
+    "per_service": {
+      "api": {
+        "replicas": 1,
+        "cpu_request_per_pod_cores": 0.15,
+        "memory_request_per_pod_gb": 0.312,
+        "total_cpu_requested_cores": 0.15,
+        "total_memory_requested_gb": 0.312
+      },
+      "app": {
+        "replicas": 1,
+        "cpu_request_per_pod_cores": 0.2,
+        "memory_request_per_pod_gb": 0.375,
+        "total_cpu_requested_cores": 0.2,
+        "total_memory_requested_gb": 0.375
+      },
+      "db": {
+        "replicas": 1,
+        "cpu_request_per_pod_cores": 0.25,
+        "memory_request_per_pod_gb": 0.562,
+        "total_cpu_requested_cores": 0.25,
+        "total_memory_requested_gb": 0.562
+      }
+    }
+  },
+  "cluster": {
+    "total_cpu_used_cores": 0.2078,
+    "total_cpu_requested_cores": 0.6,
+    "total_memory_used_gb": 0.9297,
+    "total_memory_requested_gb": 1.25,
+    "total_rps": null
+  },
+  "services": {
+    "api": {
+      "cpu_used_cores": 0.060107004040628395,
+      "memory_used_gb": 0.2111,
+      "replicas": 1.0,
+      "rps": null,
+      "error_rate": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null,
+      "avg_replicas": 1.0,
+      "replica_hours": 0.1
+    },
+    "app": {
+      "cpu_used_cores": 0.050739664850671516,
+      "memory_used_gb": 0.1371,
+      "replicas": 1.0,
+      "rps": null,
+      "error_rate": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null,
+      "avg_replicas": 1.0,
+      "replica_hours": 0.1
+    },
+    "db": {
+      "cpu_used_cores": 0.005958291348072627,
+      "memory_used_gb": 0.4302,
+      "replicas": 1.0,
+      "rps": null,
+      "rps_note": "DB is TCP proxy - no HTTP RPS",
+      "error_rate": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null,
+      "latency_note": "TCP proxy \u2014 HTTP histograms unavailable",
+      "avg_replicas": 1.0,
+      "replica_hours": 0.1
+    }
+  },
+  "replica_hours": {
+    "api": {
+      "avg_replicas": 1.0,
+      "replica_hours": 0.1
+    },
+    "app": {
+      "avg_replicas": 1.0,
+      "replica_hours": 0.1
+    },
+    "db": {
+      "avg_replicas": 1.0,
+      "replica_hours": 0.1
+    }
+  },
+  "sla_violations": {},
+  "queries_log": [
+    {
+      "type": "instant",
+      "query": "\n        sum(rate(container_cpu_usage_seconds_total{\n            namespace=\"default\",\n            pod=~\"api-.*\",\n            container=\"api\",\n            container!=\"POD\"\n        }[2m]))\n    "
+    },
+    {
+      "type": "instant",
+      "query": "\n        sum(container_memory_working_set_bytes{\n            namespace=\"default\",\n            pod=~\"api-.*\",\n            container=\"api\"\n        })\n    "
+    },
+    {
+      "type": "instant",
+      "query": "kube_deployment_spec_replicas{deployment=\"api\"}"
+    },
+    {
+      "type": "instant",
+      "query": "\n            sum(rate(envoy_http_downstream_rq_total{\n                namespace=\"default\",\n                job=\"api\",\n                envoy_http_conn_manager_prefix=\"ingress\"\n            }[2m]))\n        "
+    },
+    {
+      "type": "instant",
+      "query": "\n            sum(rate(envoy_http_downstream_rq_xx{\n                namespace=\"default\",\n                job=\"api\",\n                envoy_http_conn_manager_prefix=\"ingress\",\n                envoy_response_code_class=\"5\"\n            }[2m]))\n        "
+    },
+    {
+      "type": "instant",
+      "query": "\n                histogram_quantile(\n                    0.5,\n                    sum by (le)(\n                        rate(envoy_http_downstream_rq_time_bucket{\n                            namespace=\"default\",\n                            job=\"api\",\n                            envoy_http_conn_manager_prefix=\"ingress\"\n                        }[2m])\n                    )\n                )\n            "
+    },
+    {
+      "type": "instant",
+      "query": "\n                histogram_quantile(\n                    0.95,\n                    sum by (le)(\n                        rate(envoy_http_downstream_rq_time_bucket{\n                            namespace=\"default\",\n                            job=\"api\",\n                            envoy_http_conn_manager_prefix=\"ingress\"\n                        }[2m])\n                    )\n                )\n            "
+    },
+    {
+      "type": "instant",
+      "query": "\n                histogram_quantile(\n                    0.99,\n                    sum by (le)(\n                        rate(envoy_http_downstream_rq_time_bucket{\n                            namespace=\"default\",\n                            job=\"api\",\n                            envoy_http_conn_manager_prefix=\"ingress\"\n                        }[2m])\n                    )\n                )\n            "
+    },
+    {
+      "type": "instant",
+      "query": "\n        sum(rate(container_cpu_usage_seconds_total{\n            namespace=\"default\",\n            pod=~\"app-.*\",\n            container=\"app\",\n            container!=\"POD\"\n        }[2m]))\n    "
+    },
+    {
+      "type": "instant",
+      "query": "\n        sum(container_memory_working_set_bytes{\n            namespace=\"default\",\n            pod=~\"app-.*\",\n            container=\"app\"\n        })\n    "
+    },
+    {
+      "type": "instant",
+      "query": "kube_deployment_spec_replicas{deployment=\"app\"}"
+    },
+    {
+      "type": "instant",
+      "query": "\n            sum(rate(envoy_http_downstream_rq_total{\n                namespace=\"default\",\n                job=\"app\",\n                envoy_http_conn_manager_prefix=\"ingress\"\n            }[2m]))\n        "
+    },
+    {
+      "type": "instant",
+      "query": "\n            sum(rate(envoy_http_downstream_rq_xx{\n                namespace=\"default\",\n                job=\"app\",\n                envoy_http_conn_manager_prefix=\"ingress\",\n                envoy_response_code_class=\"5\"\n            }[2m]))\n        "
+    },
+    {
+      "type": "instant",
+      "query": "\n                histogram_quantile(\n                    0.5,\n                    sum by (le)(\n                        rate(envoy_http_downstream_rq_time_bucket{\n                            namespace=\"default\",\n                            job=\"app\",\n                            envoy_http_conn_manager_prefix=\"ingress\"\n                        }[2m])\n                    )\n                )\n            "
+    },
+    {
+      "type": "instant",
+      "query": "\n                histogram_quantile(\n                    0.95,\n                    sum by (le)(\n                        rate(envoy_http_downstream_rq_time_bucket{\n                            namespace=\"default\",\n                            job=\"app\",\n                            envoy_http_conn_manager_prefix=\"ingress\"\n                        }[2m])\n                    )\n                )\n            "
+    },
+    {
+      "type": "instant",
+      "query": "\n                histogram_quantile(\n                    0.99,\n                    sum by (le)(\n                        rate(envoy_http_downstream_rq_time_bucket{\n                            namespace=\"default\",\n                            job=\"app\",\n                            envoy_http_conn_manager_prefix=\"ingress\"\n                        }[2m])\n                    )\n                )\n            "
+    },
+    {
+      "type": "instant",
+      "query": "\n        sum(rate(container_cpu_usage_seconds_total{\n            namespace=\"default\",\n            pod=~\"db-.*\",\n            container=\"db\",\n            container!=\"POD\"\n        }[2m]))\n    "
+    },
+    {
+      "type": "instant",
+      "query": "\n        sum(container_memory_working_set_bytes{\n            namespace=\"default\",\n            pod=~\"db-.*\",\n            container=\"db\"\n        })\n    "
+    },
+    {
+      "type": "instant",
+      "query": "kube_deployment_spec_replicas{deployment=\"db\"}"
+    },
+    {
+      "type": "instant",
+      "query": "\n        sum(rate(container_cpu_usage_seconds_total{\n            namespace=\"default\",\n            container!=\"POD\",\n            container!=\"\"\n        }[2m]))\n    "
+    },
+    {
+      "type": "instant",
+      "query": "\n        sum(container_memory_working_set_bytes{\n            namespace=\"default\",\n            container!=\"POD\",\n            container!=\"\"\n        })\n    "
+    },
+    {
+      "type": "instant",
+      "query": "\n        sum(rate(envoy_http_downstream_rq_total{\n            namespace=\"default\",\n            envoy_http_conn_manager_prefix=\"ingress\"\n        }[2m]))\n    "
+    },
+    {
+      "type": "instant",
+      "query": "\n            histogram_quantile(\n                0.99,\n                sum by (le)(\n                    rate(envoy_http_downstream_rq_time_bucket{\n                        namespace=\"default\",\n                        job=\"api\",\n                        envoy_http_conn_manager_prefix=\"ingress\"\n                    }[2m])\n                )\n            )\n        "
+    },
+    {
+      "type": "instant",
+      "query": "\n            histogram_quantile(\n                0.99,\n                sum by (le)(\n                    rate(envoy_http_downstream_rq_time_bucket{\n                        namespace=\"default\",\n                        job=\"app\",\n                        envoy_http_conn_manager_prefix=\"ingress\"\n                    }[2m])\n                )\n            )\n        "
+    },
+    {
+      "type": "range",
+      "query": "kube_deployment_status_replicas{deployment=\"api\"}",
+      "start": "2026-04-27T12:47:14Z",
+      "end": "2026-04-27T12:53:14Z",
+      "step": "15s"
+    },
+    {
+      "type": "range",
+      "query": "\n            sum(rate(container_cpu_usage_seconds_total{\n                namespace=\"default\",\n                pod=~\"api-.*\",\n                container=\"api\",\n                container!=\"POD\"\n            }[2m]))\n        ",
+      "start": "2026-04-27T12:47:14Z",
+      "end": "2026-04-27T12:53:14Z",
+      "step": "15s"
+    },
+    {
+      "type": "range",
+      "query": "\n            sum(container_memory_working_set_bytes{\n                namespace=\"default\",\n                pod=~\"api-.*\",\n                container=\"api\"\n            }) / 1024 / 1024 / 1024\n        ",
+      "start": "2026-04-27T12:47:14Z",
+      "end": "2026-04-27T12:53:14Z",
+      "step": "15s"
+    },
+    {
+      "type": "range",
+      "query": "\n                histogram_quantile(\n                    0.99,\n                    sum by (le)(\n                        rate(envoy_http_downstream_rq_time_bucket{\n                            namespace=\"default\",\n                            job=\"api\",\n                            envoy_http_conn_manager_prefix=\"ingress\"\n                        }[2m])\n                    )\n                )\n            ",
+      "start": "2026-04-27T12:47:14Z",
+      "end": "2026-04-27T12:53:14Z",
+      "step": "15s"
+    },
+    {
+      "type": "range",
+      "query": "kube_deployment_status_replicas{deployment=\"app\"}",
+      "start": "2026-04-27T12:47:14Z",
+      "end": "2026-04-27T12:53:14Z",
+      "step": "15s"
+    },
+    {
+      "type": "range",
+      "query": "\n            sum(rate(container_cpu_usage_seconds_total{\n                namespace=\"default\",\n                pod=~\"app-.*\",\n                container=\"app\",\n                container!=\"POD\"\n            }[2m]))\n        ",
+      "start": "2026-04-27T12:47:14Z",
+      "end": "2026-04-27T12:53:14Z",
+      "step": "15s"
+    },
+    {
+      "type": "range",
+      "query": "\n            sum(container_memory_working_set_bytes{\n                namespace=\"default\",\n                pod=~\"app-.*\",\n                container=\"app\"\n            }) / 1024 / 1024 / 1024\n        ",
+      "start": "2026-04-27T12:47:14Z",
+      "end": "2026-04-27T12:53:14Z",
+      "step": "15s"
+    },
+    {
+      "type": "range",
+      "query": "\n                histogram_quantile(\n                    0.99,\n                    sum by (le)(\n                        rate(envoy_http_downstream_rq_time_bucket{\n                            namespace=\"default\",\n                            job=\"app\",\n                            envoy_http_conn_manager_prefix=\"ingress\"\n                        }[2m])\n                    )\n                )\n            ",
+      "start": "2026-04-27T12:47:14Z",
+      "end": "2026-04-27T12:53:14Z",
+      "step": "15s"
+    },
+    {
+      "type": "range",
+      "query": "kube_deployment_status_replicas{deployment=\"db\"}",
+      "start": "2026-04-27T12:47:14Z",
+      "end": "2026-04-27T12:53:14Z",
+      "step": "15s"
+    },
+    {
+      "type": "range",
+      "query": "\n            sum(rate(container_cpu_usage_seconds_total{\n                namespace=\"default\",\n                pod=~\"db-.*\",\n                container=\"db\",\n                container!=\"POD\"\n            }[2m]))\n        ",
+      "start": "2026-04-27T12:47:14Z",
+      "end": "2026-04-27T12:53:14Z",
+      "step": "15s"
+    },
+    {
+      "type": "range",
+      "query": "\n            sum(container_memory_working_set_bytes{\n                namespace=\"default\",\n                pod=~\"db-.*\",\n                container=\"db\"\n            }) / 1024 / 1024 / 1024\n        ",
+      "start": "2026-04-27T12:47:14Z",
+      "end": "2026-04-27T12:53:14Z",
+      "step": "15s"
+    }
+  ]
+}

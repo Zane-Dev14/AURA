@@ -1,5 +1,16 @@
 #!/bin/bash
 
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$ROOT_DIR/tools/k3d_guard.sh"
+
+assert_k3d_context
+
+KUBE_CONTEXT="$(kubectl config current-context)"
+K3D_CLUSTER="${KUBE_CONTEXT#k3d-}"
+K3D_SERVER_CONTAINER="k3d-${K3D_CLUSTER}-server-0"
+
 echo "🔍 AURA Setup Verification"
 echo "=========================="
 echo ""
@@ -31,7 +42,7 @@ echo ""
 
 # Check if images are loaded
 echo "🖼️  Docker Images in k3d:"
-docker exec k3d-aura-server-0 crictl images | grep -E "project-|locust"
+docker exec "$K3D_SERVER_CONTAINER" crictl images | grep -E "project-|locust"
 echo ""
 
 # Test Prometheus

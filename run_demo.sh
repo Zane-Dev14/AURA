@@ -5,6 +5,11 @@
 
 set -e
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$ROOT_DIR/tools/k3d_guard.sh"
+
+assert_k3d_context
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'

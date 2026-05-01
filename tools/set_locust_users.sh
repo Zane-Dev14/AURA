@@ -4,6 +4,11 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/k3d_guard.sh"
+
+assert_k3d_context
+
 USERS=${1:-}
 SPAWN=${2:-}
 NS=${3:-default}

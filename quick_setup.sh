@@ -1,5 +1,13 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$ROOT_DIR/tools/k3d_guard.sh"
+
+assert_k3d_context
+
+KUBE_CONTEXT="$(kubectl config current-context)"
+K3D_CLUSTER="${KUBE_CONTEXT#k3d-}"
 
 echo "🚀 AURA Quick Setup Script"
 echo "=========================="
@@ -11,22 +19,24 @@ while ! kubectl cluster-info &>/dev/null; do
 done
 echo "✅ Cluster is ready!"
 
-# Wait for Locust build to complete
-echo "⏳ Waiting for Docker builds to complete..."
-while docker images | grep -q "<none>"; do
-    sleep 2
-done
-echo "✅ Docker images built!"
+# Docker builds: don't block on dangling (<none>) images.
+echo "⏳ Checking Docker image state..."
+DANGLING_COUNT=$(docker images --filter dangling=true -q | wc -l | tr -d ' ')
+if [[ "${DANGLING_COUNT}" != "0" ]]; then
+  echo "⚠️  Found ${DANGLING_COUNT} dangling (<none>) images; continuing anyway."
+else
+  echo "✅ No dangling Docker images detected."
+fi
 
 # Import images to k3d
 echo "📦 Importing images to k3d cluster..."
-k3d image import project-api:local project-app:local project-db:local project-locust:local -c aura
+k3d image import project-api:local project-app:local project-db:local project-locust:local -c "$K3D_CLUSTER"
 
 # Install Prometheus
 echo "📊 Installing Prometheus stack..."
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 2>/dev/null || true
 helm repo update
-helm install kube-prom prometheus-community/kube-prometheus-stack \
+helm upgrade --install kube-prom prometheus-community/kube-prometheus-stack \
   --namespace monitoring --create-namespace \
   --values metrics/prometheus/prometheus-values.yaml \
   --wait --timeout 5m

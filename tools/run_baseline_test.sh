@@ -14,21 +14,58 @@
 # Usage:
 #   bash tools/run_baseline_test.sh
 #   bash tools/run_baseline_test.sh --skip-build   # skip image rebuild
+#   bash tools/run_baseline_test.sh --duration 30 --output-dir docs/Final Results
 # ============================================================
 set -euo pipefail
 
-WORKSPACE_DIR="/Users/eric/Documents/GitHub/AURA"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/k3d_guard.sh"
+
+assert_k3d_context
+
+KUBE_CONTEXT="$(kubectl config current-context)"
+K3D_CLUSTER="${KUBE_CONTEXT#k3d-}"
+
 VENV_PYTHON="$WORKSPACE_DIR/.venv/bin/python"
 NAMESPACE="default"
-TEST_DURATION_SEC=1800   # 30 minutes
+TEST_DURATION_MIN=30
+TEST_DURATION_SEC=$((TEST_DURATION_MIN * 60))
+OUTPUT_DIR="$WORKSPACE_DIR/docs/Final Results"
 SKIP_BUILD=false
 
 # Parse args
-for arg in "$@"; do
-    case "$arg" in
-        --skip-build) SKIP_BUILD=true ;;
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --skip-build)
+            SKIP_BUILD=true
+            shift
+            ;;
+        --duration)
+            TEST_DURATION_MIN="$2"
+            TEST_DURATION_SEC=$((TEST_DURATION_MIN * 60))
+            shift 2
+            ;;
+        --output-dir)
+            OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        *)
+            echo "[ERROR] Unknown argument: $1"
+            exit 1
+            ;;
     esac
 done
+
+if ! [[ "$TEST_DURATION_MIN" =~ ^[0-9]+$ ]] || (( TEST_DURATION_MIN < 2 )); then
+    echo "[ERROR] --duration must be an integer >= 2"
+    exit 1
+fi
+
+if [[ "$OUTPUT_DIR" != /* ]]; then
+    OUTPUT_DIR="$WORKSPACE_DIR/$OUTPUT_DIR"
+fi
+mkdir -p "$OUTPUT_DIR"
 
 # Colors
 RED='\033[0;31m'
@@ -47,11 +84,19 @@ PROM_PF_PID=""
 LOCUST_PF_PID=""
 BG_PIDS=()
 
+# Prefer stable NodePorts (k3d port mappings) instead of brittle port-forwards.
+PROM_URL="${PROM_URL:-http://127.0.0.1:30090}"
+PROM_NAMESPACE="monitoring"
+PROM_STATEFULSET="prometheus-kube-prom-kube-prometheus-prometheus"
+LOCUST_URL="${LOCUST_URL:-http://127.0.0.1:30089}"
+USING_PROM_PORT_FORWARD=false
+USING_LOCUST_PORT_FORWARD=false
+
 cleanup() {
     echo ""
     log_info "Cleaning up..."
     # Stop Locust test
-    curl -s -X POST http://127.0.0.1:8089/stop &>/dev/null || true
+    curl -s -X POST "${LOCUST_URL}/stop" &>/dev/null || true
     # Kill port-forwards
     [[ -n "$PROM_PF_PID" ]]   && kill "$PROM_PF_PID"   2>/dev/null || true
     [[ -n "$LOCUST_PF_PID" ]] && kill "$LOCUST_PF_PID" 2>/dev/null || true
@@ -96,6 +141,8 @@ start_prom_portforward() {
         exit 1
     fi
     log_ok "Prometheus port-forward active (PID: $PROM_PF_PID)"
+    PROM_URL="http://127.0.0.1:9090"
+    USING_PROM_PORT_FORWARD=true
 }
 
 start_locust_portforward() {
@@ -111,26 +158,78 @@ start_locust_portforward() {
         exit 1
     fi
     log_ok "Locust port-forward active (PID: $LOCUST_PF_PID)"
+    LOCUST_URL="http://127.0.0.1:8089"
+    USING_LOCUST_PORT_FORWARD=true
+}
+
+ensure_prom_endpoint() {
+    if curl -sf "${PROM_URL}/api/v1/query?query=up" &>/dev/null; then
+        return 0
+    fi
+    log_warn "Prometheus not reachable at ${PROM_URL}; attempting local restart..."
+    kubectl -n "$PROM_NAMESPACE" rollout restart "statefulset/${PROM_STATEFULSET}" >/dev/null 2>&1 || true
+    if kubectl -n "$PROM_NAMESPACE" rollout status "statefulset/${PROM_STATEFULSET}" --timeout=180s >/dev/null 2>&1; then
+        for _ in $(seq 1 30); do
+            if curl -sf "${PROM_URL}/api/v1/query?query=up" &>/dev/null; then
+                log_ok "Prometheus endpoint recovered"
+                return 0
+            fi
+            sleep 2
+        done
+    fi
+    log_warn "Prometheus restart did not recover ${PROM_URL}; falling back to port-forward..."
+    start_prom_portforward
+}
+
+ensure_locust_endpoint() {
+    if curl -sf "${LOCUST_URL}/stats/requests" &>/dev/null; then
+        return 0
+    fi
+    log_warn "Locust not reachable at ${LOCUST_URL}; falling back to port-forward..."
+    start_locust_portforward
 }
 
 ensure_prom_alive() {
-    if ! curl -sf "http://127.0.0.1:9090/api/v1/query?query=up" &>/dev/null; then
+    if curl -sf "${PROM_URL}/api/v1/query?query=up" &>/dev/null; then
+        return 0
+    fi
+    if [[ "$USING_PROM_PORT_FORWARD" == "true" ]]; then
         log_warn "Prometheus port-forward died — restarting..."
         start_prom_portforward
+        return 0
     fi
+    log_warn "Prometheus became unreachable at ${PROM_URL}; attempting local restart..."
+    kubectl -n "$PROM_NAMESPACE" rollout restart "statefulset/${PROM_STATEFULSET}" >/dev/null 2>&1 || true
+    if kubectl -n "$PROM_NAMESPACE" rollout status "statefulset/${PROM_STATEFULSET}" --timeout=180s >/dev/null 2>&1; then
+        for _ in $(seq 1 30); do
+            if curl -sf "${PROM_URL}/api/v1/query?query=up" &>/dev/null; then
+                log_ok "Prometheus endpoint recovered"
+                return 0
+            fi
+            sleep 2
+        done
+    fi
+    log_err "Prometheus became unreachable at ${PROM_URL}"
+    return 1
 }
 
 ensure_locust_alive() {
-    if ! curl -sf "http://127.0.0.1:8089/stats/requests" &>/dev/null; then
+    if curl -sf "${LOCUST_URL}/stats/requests" &>/dev/null; then
+        return 0
+    fi
+    if [[ "$USING_LOCUST_PORT_FORWARD" == "true" ]]; then
         log_warn "Locust port-forward died — restarting..."
         start_locust_portforward
+        return 0
     fi
+    log_err "Locust became unreachable at ${LOCUST_URL}"
+    return 1
 }
 
 get_locust_stats() {
     # Returns: total_requests current_rps total_failures
     local stats
-    stats=$(curl -sf http://127.0.0.1:8089/stats/requests 2>/dev/null || echo "")
+    stats=$(curl -sf "${LOCUST_URL}/stats/requests" 2>/dev/null || echo "")
     if [[ -z "$stats" ]]; then
         echo "0 0 0"
         return
@@ -157,6 +256,18 @@ except Exception:
 " 2>/dev/null || echo "0 0 0"
 }
 
+reset_replicas_to_single() {
+    log_info "Setting initial replicas to 1 for api/app/db (fair start state)..."
+    kubectl scale deployment api -n "$NAMESPACE" --replicas=1
+    kubectl scale deployment app -n "$NAMESPACE" --replicas=1
+    kubectl scale deployment db -n "$NAMESPACE" --replicas=1
+
+    kubectl rollout status deployment/api -n "$NAMESPACE" --timeout=120s
+    kubectl rollout status deployment/app -n "$NAMESPACE" --timeout=120s
+    kubectl rollout status deployment/db -n "$NAMESPACE" --timeout=120s
+    log_ok "All services at 1 replica"
+}
+
 collect_metrics() {
     local phase_name=$1
     local elapsed_min=$2
@@ -165,7 +276,11 @@ collect_metrics() {
 
     log_info "━━━ Collecting metrics: $phase_name (T+${elapsed_min}min) ━━━"
     cd "$WORKSPACE_DIR"
-    "$VENV_PYTHON" tools/gke_cost_report.py --mode baseline --duration 30 2>&1 | tee "/tmp/metrics_${phase_name}.log"
+    "$VENV_PYTHON" tools/gke_cost_report.py \
+        --mode baseline \
+        --duration "$TEST_DURATION_MIN" \
+        --output-dir "$OUTPUT_DIR" \
+        2>&1 | tee "/tmp/metrics_${phase_name}.log"
     log_ok "Metrics collected: $phase_name"
 }
 
@@ -174,7 +289,7 @@ collect_metrics() {
 # ────────────────────────────────────────────────────────
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}  AURA Baseline Test — 30-minute automated run${NC}"
+echo -e "${BLUE}  AURA Baseline Test — ${TEST_DURATION_MIN}-minute automated run${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 # ── Step 1: Verify cluster ──
@@ -193,7 +308,7 @@ if [[ "$SKIP_BUILD" == "false" ]]; then
     log_ok "Image rebuilt"
     kubectl apply -f $WORKSPACE_DIR/microservices/locust/locust.yaml
     log_info "Importing image into k3d cluster..."
-    k3d image import project-locust:local -c aura 2>&1 | tail -2
+    k3d image import project-locust:local -c "$K3D_CLUSTER" 2>&1 | tail -2
     log_ok "Image imported"
 
     log_info "Restarting Locust deployment..."
@@ -212,26 +327,25 @@ for svc in api app db; do
 done
 log_ok "Service labels verified"
 
-# ── Step 4: Start port-forwards ──
-log_info "Starting port-forwards..."
-pkill -f "kubectl port-forward.*9090" 2>/dev/null || true
-pkill -f "kubectl port-forward.*8089" 2>/dev/null || true
-sleep 2
+# ── Step 4: Set fair initial replicas (1/1/1) ──
+reset_replicas_to_single
 
-start_prom_portforward
-start_locust_portforward
+# ── Step 5: Ensure endpoints (prefer NodePorts) ──
+log_info "Checking Prometheus/Locust endpoints (prefer NodePorts)..."
+ensure_prom_endpoint
+ensure_locust_endpoint
 
-# ── Step 5: Start 30-min baseline test ──
+# ── Step 6: Start load test ──
 TEST_START=$(date +%s)
 TEST_START_READABLE=$(date)
 
-log_info "Starting 30-minute baseline load test..."
+log_info "Starting ${TEST_DURATION_MIN}-minute baseline load test..."
 echo "  Host: http://app:8080"
-echo "  Shape: ProductionDayShape (30 min phased)"
+echo "  Shape: ProductionDayShape"
 echo "  Start: $TEST_START_READABLE"
 
 # LoadTestShape controls user count; swarm params are overridden by the shape.
-SWARM_RESP=$(curl -sf -X POST http://127.0.0.1:8089/swarm \
+SWARM_RESP=$(curl -sf -X POST "${LOCUST_URL}/swarm" \
     -H "Content-Type: application/x-www-form-urlencoded" \
     -d "user_count=1&spawn_rate=1&host=http://app:8080" 2>&1 || echo "FAIL")
 
@@ -241,28 +355,46 @@ if [[ "$SWARM_RESP" == "FAIL" ]]; then
 fi
 log_ok "Test started"
 
-# ── Step 6: Schedule background metrics collections ──
-(
-    sleep 300    # T+5min — ramp/hold phase
-    collect_metrics "05min_ramp" 5
-) &
-BG_PIDS+=($!)
+# ── Step 7: Schedule background metrics collections ──
+PHASE1_MIN=$(( TEST_DURATION_MIN / 6 ))
+PHASE2_MIN=$(( TEST_DURATION_MIN / 2 ))
+PHASE3_MIN=$(( (TEST_DURATION_MIN * 5) / 6 ))
 
-(
-    sleep 900    # T+15min — hold/spike transition
-    collect_metrics "15min_spike" 15
-) &
-BG_PIDS+=($!)
+(( PHASE1_MIN < 1 )) && PHASE1_MIN=1
+(( PHASE2_MIN < PHASE1_MIN + 1 )) && PHASE2_MIN=$((PHASE1_MIN + 1))
+(( PHASE3_MIN < PHASE2_MIN + 1 )) && PHASE3_MIN=$((PHASE2_MIN + 1))
 
-(
-    sleep 1500   # T+25min — peak/cooldown
-    collect_metrics "25min_peak" 25
-) &
-BG_PIDS+=($!)
+(( PHASE1_MIN >= TEST_DURATION_MIN )) && PHASE1_MIN=0
+(( PHASE2_MIN >= TEST_DURATION_MIN )) && PHASE2_MIN=0
+(( PHASE3_MIN >= TEST_DURATION_MIN )) && PHASE3_MIN=0
 
-# ── Step 7: Monitor loop ──
-log_info "Monitoring test progress (30 minutes)..."
-echo "  Live dashboard: http://localhost:8089/"
+if (( PHASE1_MIN > 0 )); then
+    (
+        sleep $((PHASE1_MIN * 60))
+        collect_metrics "phase1" "$PHASE1_MIN"
+    ) &
+    BG_PIDS+=($!)
+fi
+
+if (( PHASE2_MIN > 0 )); then
+    (
+        sleep $((PHASE2_MIN * 60))
+        collect_metrics "phase2" "$PHASE2_MIN"
+    ) &
+    BG_PIDS+=($!)
+fi
+
+if (( PHASE3_MIN > 0 )); then
+    (
+        sleep $((PHASE3_MIN * 60))
+        collect_metrics "phase3" "$PHASE3_MIN"
+    ) &
+    BG_PIDS+=($!)
+fi
+
+# ── Step 8: Monitor loop ──
+log_info "Monitoring test progress (${TEST_DURATION_MIN} minutes)..."
+echo "  Live dashboard: ${LOCUST_URL}/"
 LAST_PF_CHECK=0
 
 while true; do
@@ -278,8 +410,8 @@ while true; do
 
     read -r TOTAL_RQ CURRENT_RPS TOTAL_FAIL <<< "$(get_locust_stats)"
 
-    printf "\r  ⏱ %2d / 30 min | Requests: %-8s | RPS: %-6s | Fails: %-6s" \
-        "$ELAPSED_MIN" "$TOTAL_RQ" "$CURRENT_RPS" "$TOTAL_FAIL"
+    printf "\r  ⏱ %2d / %2d min | Requests: %-8s | RPS: %-6s | Fails: %-6s" \
+        "$ELAPSED_MIN" "$TEST_DURATION_MIN" "$TOTAL_RQ" "$CURRENT_RPS" "$TOTAL_FAIL"
 
     if (( ELAPSED > TEST_DURATION_SEC + 30 )); then
         echo ""
@@ -290,22 +422,22 @@ while true; do
     sleep 15
 done
 
-# ── Step 8: Final metrics collection ──
+# ── Step 9: Final metrics collection ──
 log_info "Running final metrics collection..."
 ensure_prom_alive
-collect_metrics "final" 30
+collect_metrics "final" "$TEST_DURATION_MIN"
 
-# ── Step 9: Stop Locust ──
+# ── Step 10: Stop Locust ──
 log_info "Stopping Locust test..."
-curl -sf -X POST http://127.0.0.1:8089/stop &>/dev/null || true
+curl -sf -X POST "${LOCUST_URL}/stop" &>/dev/null || true
 
-# ── Step 10: Wait for background collectors ──
+# ── Step 11: Wait for background collectors ──
 log_info "Waiting for background collectors to finish..."
 for pid in "${BG_PIDS[@]}"; do
     wait "$pid" 2>/dev/null || true
 done
 
-# ── Step 11: Summary ──
+# ── Step 12: Summary ──
 TEST_END=$(date +%s)
 TOTAL_MIN=$(( (TEST_END - TEST_START) / 60 ))
 
@@ -318,9 +450,9 @@ echo "  End:      $(date)"
 echo "  Duration: ${TOTAL_MIN} minutes"
 echo ""
 echo -e "${YELLOW}Output files:${NC}"
-ls -lh "$WORKSPACE_DIR/docs/Final Results"/baseline_metrics_*.json 2>/dev/null | tail -5 || echo "  (none found)"
+ls -lh "$OUTPUT_DIR"/baseline_metrics_*.json 2>/dev/null | tail -5 || echo "  (none found)"
 echo ""
 echo -e "${YELLOW}CSV time-series:${NC}"
-ls -lh "$WORKSPACE_DIR/docs/Final Results"/*_over_time_baseline.csv 2>/dev/null | sed 's/^/  /' || echo "  (none found)"
+ls -lh "$OUTPUT_DIR"/*_over_time_baseline.csv 2>/dev/null | sed 's/^/  /' || echo "  (none found)"
 echo ""
 log_ok "All done!"

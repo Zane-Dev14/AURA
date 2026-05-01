@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-AURA Baseline Metrics Collector
+AURA Local Metrics Collector (legacy filename: gke_cost_report.py)
 
-Collects Prometheus metrics for thesis-grade cost-performance analysis.
-Designed for reproducible experiments comparing QMIX vs HPA autoscalers.
+Collects Prometheus and Kubernetes metrics from a local k3d deployment for
+reproducible baseline, QMIX, and HPA comparisons.
 
 IMPORTANT DESIGN DECISIONS:
-- Cost estimation is based on Kubernetes resource REQUESTS, NOT usage.
-- GKE charges for entire nodes, not container utilization.
+- Measurements are computed from in-cluster telemetry only.
 - DB service uses TCP proxy so HTTP latency histograms are unavailable.
 - All PromQL queries are logged for reproducibility.
+- Script execution is blocked unless kubectl context is k3d-*.
 
 Usage:
     python tools/gke_cost_report.py --mode baseline
@@ -37,10 +37,24 @@ import requests
 # CONFIGURATION
 # ============================================================
 
+_PROM_OVERRIDE = (
+    os.environ.get("PROMETHEUS_URL")
+    or os.environ.get("AURA_PROMETHEUS_URL")
+    or ""
+).strip().rstrip("/")
+
 PROM_BASES = [
-    "http://127.0.0.1:9090",    # IPv4 (port-forward default)
-    "http://localhost:9090",     # Hostname fallback
+    # Prefer stable NodePort from local kube-prometheus-stack values.
+    "http://127.0.0.1:30090",
+    "http://localhost:30090",
+
+    # Backwards-compatible fallbacks (port-forward).
+    "http://127.0.0.1:9090",
+    "http://localhost:9090",
 ]
+
+if _PROM_OVERRIDE:
+    PROM_BASES.insert(0, _PROM_OVERRIDE)
 
 SERVICES = ["api", "app", "db"]
 NAMESPACE = "default"
@@ -52,6 +66,7 @@ QUERY_RANGE_STEP = "15s"  # 15-second intervals for time-series
 # Retry settings for Prometheus queries
 PROM_MAX_RETRIES = 3
 PROM_RETRY_DELAY = 2  # seconds between retries
+ENFORCE_K3D_CONTEXT = os.environ.get("AURA_ENFORCE_K3D_CONTEXT", "true").lower() == "true"
 
 # Output directory
 OUTPUT_DIR = Path("docs/Final Results")
@@ -62,6 +77,33 @@ OUTPUT_DIR = Path("docs/Final Results")
 
 # Store all queries for reproducibility logging
 QUERIES_LOG = []
+
+
+def get_current_kube_context() -> Optional[str]:
+    try:
+        result = subprocess.run(
+            ["kubectl", "config", "current-context"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return None
+        context = result.stdout.strip()
+        return context or None
+    except Exception:
+        return None
+
+
+def assert_k3d_context():
+    if not ENFORCE_K3D_CONTEXT:
+        return
+
+    context = get_current_kube_context()
+    if not context:
+        raise RuntimeError("kubectl current-context is empty. Refusing to run metrics collector.")
+    if not context.startswith("k3d-"):
+        raise RuntimeError(f"Refusing to run on non-k3d context: {context}")
 
 
 def prom_query(query: str, base_url: Optional[str] = None) -> Any:
@@ -662,6 +704,7 @@ def collect_all_metrics(mode: str) -> dict:
     print(f"AURA Metrics Collection — Mode: {mode.upper()}")
     print(f"{'='*60}")
     
+    cluster_context = get_current_kube_context()
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     start_str, end_str, start_ts, end_ts = get_time_range(TEST_DURATION_MINUTES)
     
@@ -720,6 +763,7 @@ def collect_all_metrics(mode: str) -> dict:
     result = {
         "timestamp": timestamp,
         "mode": mode,
+        "cluster_context": cluster_context,
         "test_duration_minutes": TEST_DURATION_MINUTES,
         "collection_window": {
             "start": start_str,
@@ -776,6 +820,12 @@ def main():
         help="Output directory (default: docs/Final Results)"
     )
     args = parser.parse_args()
+
+    try:
+        assert_k3d_context()
+    except RuntimeError as e:
+        print(f"ERROR: {e}")
+        raise SystemExit(1)
     
     # Use args values (don't modify globals)
     test_duration = args.duration

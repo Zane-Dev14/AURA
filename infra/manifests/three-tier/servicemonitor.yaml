@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: envoy-metrics
+  namespace: monitoring
+  labels:
+    release: kube-prom
+
+spec:
+  selector:
+    matchLabels:
+      metrics: envoy
+  namespaceSelector:
+    matchNames:
+      - default
+  endpoints:
+    - port: metrics
+      path: /stats/prometheus
+      interval: 15s

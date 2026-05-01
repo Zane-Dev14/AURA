@@ -18,13 +18,24 @@
 # Usage:
 #   bash tools/run_qmix_test.sh
 #   bash tools/run_qmix_test.sh --skip-build   # skip image rebuild
+#   bash tools/run_qmix_test.sh --duration 30 --output-dir docs/Final Results
 # ============================================================
 set -euo pipefail
 
-WORKSPACE_DIR="/Users/eric/Documents/GitHub/AURA"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/k3d_guard.sh"
+
+assert_k3d_context
+
+KUBE_CONTEXT="$(kubectl config current-context)"
+K3D_CLUSTER="${KUBE_CONTEXT#k3d-}"
+
 VENV_PYTHON="$WORKSPACE_DIR/.venv/bin/python"
 NAMESPACE="default"
-TEST_DURATION_SEC=1800   # 30 minutes
+TEST_DURATION_MIN=30
+TEST_DURATION_SEC=$((TEST_DURATION_MIN * 60))
+OUTPUT_DIR="$WORKSPACE_DIR/docs/Final Results"
 SKIP_BUILD=false
 
 # QMIX replica minimums (must match agent_controller.py MIN_REPLICAS)
@@ -33,11 +44,37 @@ APP_MIN_REPLICAS=1
 DB_MIN_REPLICAS=1
 
 # Parse args
-for arg in "$@"; do
-    case "$arg" in
-        --skip-build) SKIP_BUILD=true ;;
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --skip-build)
+            SKIP_BUILD=true
+            shift
+            ;;
+        --duration)
+            TEST_DURATION_MIN="$2"
+            TEST_DURATION_SEC=$((TEST_DURATION_MIN * 60))
+            shift 2
+            ;;
+        --output-dir)
+            OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        *)
+            echo "[ERROR] Unknown argument: $1"
+            exit 1
+            ;;
     esac
 done
+
+if ! [[ "$TEST_DURATION_MIN" =~ ^[0-9]+$ ]] || (( TEST_DURATION_MIN < 2 )); then
+    echo "[ERROR] --duration must be an integer >= 2"
+    exit 1
+fi
+
+if [[ "$OUTPUT_DIR" != /* ]]; then
+    OUTPUT_DIR="$WORKSPACE_DIR/$OUTPUT_DIR"
+fi
+mkdir -p "$OUTPUT_DIR"
 
 # Colors
 RED='\033[0;31m'
@@ -59,6 +96,14 @@ LOCUST_PF_PID=""
 AGENT_PID=""
 BG_PIDS=()
 
+# Prefer stable NodePorts (k3d port mappings) instead of brittle port-forwards.
+PROM_URL="${PROM_URL:-http://127.0.0.1:30090}"
+PROM_NAMESPACE="monitoring"
+PROM_STATEFULSET="prometheus-kube-prom-kube-prometheus-prometheus"
+LOCUST_URL="${LOCUST_URL:-http://127.0.0.1:30089}"
+USING_PROM_PORT_FORWARD=false
+USING_LOCUST_PORT_FORWARD=false
+
 cleanup() {
     echo ""
     log_info "Cleaning up..."
@@ -69,7 +114,7 @@ cleanup() {
         wait "$AGENT_PID" 2>/dev/null || true
     fi
     # Stop Locust test
-    curl -s -X POST http://127.0.0.1:8089/stop &>/dev/null || true
+    curl -s -X POST "${LOCUST_URL}/stop" &>/dev/null || true
     # Kill port-forwards
     [[ -n "$PROM_PF_PID" ]]   && kill "$PROM_PF_PID"   2>/dev/null || true
     [[ -n "$LOCUST_PF_PID" ]] && kill "$LOCUST_PF_PID" 2>/dev/null || true
@@ -113,6 +158,8 @@ start_prom_portforward() {
         exit 1
     fi
     log_ok "Prometheus port-forward active (PID: $PROM_PF_PID)"
+    PROM_URL="http://127.0.0.1:9090"
+    USING_PROM_PORT_FORWARD=true
 }
 
 start_locust_portforward() {
@@ -128,25 +175,77 @@ start_locust_portforward() {
         exit 1
     fi
     log_ok "Locust port-forward active (PID: $LOCUST_PF_PID)"
+    LOCUST_URL="http://127.0.0.1:8089"
+    USING_LOCUST_PORT_FORWARD=true
+}
+
+ensure_prom_endpoint() {
+    if curl -sf "${PROM_URL}/api/v1/query?query=up" &>/dev/null; then
+        return 0
+    fi
+    log_warn "Prometheus not reachable at ${PROM_URL}; attempting local restart..."
+    kubectl -n "$PROM_NAMESPACE" rollout restart "statefulset/${PROM_STATEFULSET}" >/dev/null 2>&1 || true
+    if kubectl -n "$PROM_NAMESPACE" rollout status "statefulset/${PROM_STATEFULSET}" --timeout=180s >/dev/null 2>&1; then
+        for _ in $(seq 1 30); do
+            if curl -sf "${PROM_URL}/api/v1/query?query=up" &>/dev/null; then
+                log_ok "Prometheus endpoint recovered"
+                return 0
+            fi
+            sleep 2
+        done
+    fi
+    log_warn "Prometheus restart did not recover ${PROM_URL}; falling back to port-forward..."
+    start_prom_portforward
+}
+
+ensure_locust_endpoint() {
+    if curl -sf "${LOCUST_URL}/stats/requests" &>/dev/null; then
+        return 0
+    fi
+    log_warn "Locust not reachable at ${LOCUST_URL}; falling back to port-forward..."
+    start_locust_portforward
 }
 
 ensure_prom_alive() {
-    if ! curl -sf "http://127.0.0.1:9090/api/v1/query?query=up" &>/dev/null; then
+    if curl -sf "${PROM_URL}/api/v1/query?query=up" &>/dev/null; then
+        return 0
+    fi
+    if [[ "$USING_PROM_PORT_FORWARD" == "true" ]]; then
         log_warn "Prometheus port-forward died — restarting..."
         start_prom_portforward
+        return 0
     fi
+    log_warn "Prometheus became unreachable at ${PROM_URL}; attempting local restart..."
+    kubectl -n "$PROM_NAMESPACE" rollout restart "statefulset/${PROM_STATEFULSET}" >/dev/null 2>&1 || true
+    if kubectl -n "$PROM_NAMESPACE" rollout status "statefulset/${PROM_STATEFULSET}" --timeout=180s >/dev/null 2>&1; then
+        for _ in $(seq 1 30); do
+            if curl -sf "${PROM_URL}/api/v1/query?query=up" &>/dev/null; then
+                log_ok "Prometheus endpoint recovered"
+                return 0
+            fi
+            sleep 2
+        done
+    fi
+    log_err "Prometheus became unreachable at ${PROM_URL}"
+    return 1
 }
 
 ensure_locust_alive() {
-    if ! curl -sf "http://127.0.0.1:8089/stats/requests" &>/dev/null; then
+    if curl -sf "${LOCUST_URL}/stats/requests" &>/dev/null; then
+        return 0
+    fi
+    if [[ "$USING_LOCUST_PORT_FORWARD" == "true" ]]; then
         log_warn "Locust port-forward died — restarting..."
         start_locust_portforward
+        return 0
     fi
+    log_err "Locust became unreachable at ${LOCUST_URL}"
+    return 1
 }
 
 get_locust_stats() {
     local stats
-    stats=$(curl -sf http://127.0.0.1:8089/stats/requests 2>/dev/null || echo "")
+    stats=$(curl -sf "${LOCUST_URL}/stats/requests" 2>/dev/null || echo "")
     if [[ -z "$stats" ]]; then
         echo "0 0 0"
         return
@@ -182,6 +281,18 @@ get_replica_counts() {
     echo "$api $app $db"
 }
 
+reset_replicas_to_single() {
+    log_info "Setting initial replicas to 1 for api/app/db (fair start state)..."
+    kubectl scale deployment api -n "$NAMESPACE" --replicas=1
+    kubectl scale deployment app -n "$NAMESPACE" --replicas=1
+    kubectl scale deployment db -n "$NAMESPACE" --replicas=1
+
+    kubectl rollout status deployment/api -n "$NAMESPACE" --timeout=120s
+    kubectl rollout status deployment/app -n "$NAMESPACE" --timeout=120s
+    kubectl rollout status deployment/db -n "$NAMESPACE" --timeout=120s
+    log_ok "All services at 1 replica"
+}
+
 collect_metrics() {
     local phase_name=$1
     local elapsed_min=$2
@@ -190,7 +301,11 @@ collect_metrics() {
 
     log_info "━━━ Collecting metrics: $phase_name (T+${elapsed_min}min) ━━━"
     cd "$WORKSPACE_DIR"
-    "$VENV_PYTHON" tools/gke_cost_report.py --mode qmix --duration 30 2>&1 | tee "/tmp/metrics_qmix_${phase_name}.log"
+    "$VENV_PYTHON" tools/gke_cost_report.py \
+        --mode qmix \
+        --duration "$TEST_DURATION_MIN" \
+        --output-dir "$OUTPUT_DIR" \
+        2>&1 | tee "/tmp/metrics_qmix_${phase_name}.log"
     log_ok "Metrics collected: $phase_name"
 }
 
@@ -199,7 +314,7 @@ collect_metrics() {
 # ────────────────────────────────────────────────────────
 
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${CYAN}  AURA QMIX Test — 30-minute automated run${NC}"
+echo -e "${CYAN}  AURA QMIX Test — ${TEST_DURATION_MIN}-minute automated run${NC}"
 echo -e "${CYAN}  (Same workload as baseline, QMIX agent active)${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
@@ -219,7 +334,7 @@ if [[ "$SKIP_BUILD" == "false" ]]; then
     log_ok "Image rebuilt"
 
     log_info "Importing image into k3d cluster..."
-    k3d image import project-locust:local -c aura 2>&1 | tail -2
+    k3d image import project-locust:local -c "$K3D_CLUSTER" 2>&1 | tail -2
     log_ok "Image imported"
 
     log_info "Restarting Locust deployment..."
@@ -238,20 +353,13 @@ for svc in api app db; do
 done
 log_ok "Service labels verified"
 
-# ── Step 4: Set QMIX initial replicas ──
-log_qmix "Letting QMIX agent determine initial replicas (no forced scaling)..."
-log_info "Current replicas will be used as starting point"
-# Don't force initial replicas - let the agent scale naturally from current state
-log_ok "Ready to start with current replica state"
+# ── Step 4: Set fair initial replicas (1/1/1) ──
+reset_replicas_to_single
 
-# ── Step 5: Start port-forwards ──
-log_info "Starting port-forwards..."
-pkill -f "kubectl port-forward.*9090" 2>/dev/null || true
-pkill -f "kubectl port-forward.*8089" 2>/dev/null || true
-sleep 2
-
-start_prom_portforward
-start_locust_portforward
+# ── Step 5: Ensure endpoints (prefer NodePorts) ──
+log_info "Checking Prometheus/Locust endpoints (prefer NodePorts)..."
+ensure_prom_endpoint
+ensure_locust_endpoint
 
 # ── Step 6: Start QMIX agent controller ──
 log_qmix "Starting QMIX agent controller (LIVE mode)..."
@@ -259,7 +367,7 @@ cd "$WORKSPACE_DIR"
 
 AURA_SHADOW_MODE=false \
 AURA_CHECKPOINT_DIR=marl/qmix_trained \
-PROMETHEUS_URL=http://localhost:9090 \
+PROMETHEUS_URL="$PROM_URL" \
 "$VENV_PYTHON" deployment/agent_controller.py \
     > /tmp/qmix_agent.log 2>&1 &
 AGENT_PID=$!
@@ -279,13 +387,13 @@ fi
 TEST_START=$(date +%s)
 TEST_START_READABLE=$(date)
 
-log_info "Starting 30-minute QMIX load test..."
+log_info "Starting ${TEST_DURATION_MIN}-minute QMIX load test..."
 echo "  Host: http://app:8080"
-echo "  Shape: ProductionDayShape (30 min phased)"
+echo "  Shape: ProductionDayShape"
 echo "  Agent: QMIX LIVE (scaling enabled)"
 echo "  Start: $TEST_START_READABLE"
 
-SWARM_RESP=$(curl -sf -X POST http://127.0.0.1:8089/swarm \
+SWARM_RESP=$(curl -sf -X POST "${LOCUST_URL}/swarm" \
     -H "Content-Type: application/x-www-form-urlencoded" \
     -d "user_count=1&spawn_rate=1&host=http://app:8080" 2>&1 || echo "FAIL")
 
@@ -296,27 +404,45 @@ fi
 log_ok "Test started"
 
 # ── Step 8: Schedule background metrics collections ──
-(
-    sleep 300    # T+5min — ramp/hold phase
-    collect_metrics "05min_ramp" 5
-) &
-BG_PIDS+=($!)
+PHASE1_MIN=$(( TEST_DURATION_MIN / 6 ))
+PHASE2_MIN=$(( TEST_DURATION_MIN / 2 ))
+PHASE3_MIN=$(( (TEST_DURATION_MIN * 5) / 6 ))
 
-(
-    sleep 900    # T+15min — hold/spike transition
-    collect_metrics "15min_spike" 15
-) &
-BG_PIDS+=($!)
+(( PHASE1_MIN < 1 )) && PHASE1_MIN=1
+(( PHASE2_MIN < PHASE1_MIN + 1 )) && PHASE2_MIN=$((PHASE1_MIN + 1))
+(( PHASE3_MIN < PHASE2_MIN + 1 )) && PHASE3_MIN=$((PHASE2_MIN + 1))
 
-(
-    sleep 1500   # T+25min — peak/cooldown
-    collect_metrics "25min_peak" 25
-) &
-BG_PIDS+=($!)
+(( PHASE1_MIN >= TEST_DURATION_MIN )) && PHASE1_MIN=0
+(( PHASE2_MIN >= TEST_DURATION_MIN )) && PHASE2_MIN=0
+(( PHASE3_MIN >= TEST_DURATION_MIN )) && PHASE3_MIN=0
+
+if (( PHASE1_MIN > 0 )); then
+    (
+        sleep $((PHASE1_MIN * 60))
+        collect_metrics "phase1" "$PHASE1_MIN"
+    ) &
+    BG_PIDS+=($!)
+fi
+
+if (( PHASE2_MIN > 0 )); then
+    (
+        sleep $((PHASE2_MIN * 60))
+        collect_metrics "phase2" "$PHASE2_MIN"
+    ) &
+    BG_PIDS+=($!)
+fi
+
+if (( PHASE3_MIN > 0 )); then
+    (
+        sleep $((PHASE3_MIN * 60))
+        collect_metrics "phase3" "$PHASE3_MIN"
+    ) &
+    BG_PIDS+=($!)
+fi
 
 # ── Step 9: Monitor loop ──
-log_info "Monitoring test progress (30 minutes)..."
-echo "  Live dashboard: http://localhost:8089/"
+log_info "Monitoring test progress (${TEST_DURATION_MIN} minutes)..."
+echo "  Live dashboard: ${LOCUST_URL}/"
 echo "  Agent log:      tail -f /tmp/qmix_agent.log"
 LAST_PF_CHECK=0
 
@@ -335,7 +461,7 @@ while true; do
             cd "$WORKSPACE_DIR"
             AURA_SHADOW_MODE=false \
             AURA_CHECKPOINT_DIR=marl/qmix_trained \
-            PROMETHEUS_URL=http://localhost:9090 \
+            PROMETHEUS_URL="$PROM_URL" \
             "$VENV_PYTHON" deployment/agent_controller.py \
                 >> /tmp/qmix_agent.log 2>&1 &
             AGENT_PID=$!
@@ -353,8 +479,8 @@ while true; do
     read -r TOTAL_RQ CURRENT_RPS TOTAL_FAIL <<< "$(get_locust_stats)"
     read -r R_API R_APP R_DB <<< "$(get_replica_counts)"
 
-    printf "\r  ⏱ %2d / 30 min | RPS: %-6s | Fails: %-5s | Replicas: api=%s app=%s db=%s" \
-        "$ELAPSED_MIN" "$CURRENT_RPS" "$TOTAL_FAIL" "$R_API" "$R_APP" "$R_DB"
+    printf "\r  ⏱ %2d / %2d min | RPS: %-6s | Fails: %-5s | Replicas: api=%s app=%s db=%s" \
+        "$ELAPSED_MIN" "$TEST_DURATION_MIN" "$CURRENT_RPS" "$TOTAL_FAIL" "$R_API" "$R_APP" "$R_DB"
 
     if (( ELAPSED > TEST_DURATION_SEC + 30 )); then
         echo ""
@@ -368,7 +494,7 @@ done
 # ── Step 10: Final metrics collection ──
 log_info "Running final metrics collection..."
 ensure_prom_alive
-collect_metrics "final" 30
+collect_metrics "final" "$TEST_DURATION_MIN"
 
 # ── Step 11: Stop QMIX agent ──
 log_qmix "Stopping QMIX agent..."
@@ -379,7 +505,7 @@ log_ok "Agent stopped"
 
 # ── Step 12: Stop Locust ──
 log_info "Stopping Locust test..."
-curl -sf -X POST http://127.0.0.1:8089/stop &>/dev/null || true
+curl -sf -X POST "${LOCUST_URL}/stop" &>/dev/null || true
 
 # ── Step 13: Wait for background collectors ──
 log_info "Waiting for background collectors to finish..."
@@ -389,10 +515,10 @@ done
 
 # ── Step 14: Copy agent decisions log ──
 if [[ -f "$WORKSPACE_DIR/logs/shadow_decisions.csv" ]]; then
-    DECISIONS_DEST="$WORKSPACE_DIR/docs/Final Results/QMIX"
+    DECISIONS_DEST="$OUTPUT_DIR/QMIX"
     mkdir -p "$DECISIONS_DEST"
     cp "$WORKSPACE_DIR/logs/shadow_decisions.csv" "$DECISIONS_DEST/qmix_decisions_$(date +%Y%m%d_%H%M%S).csv"
-    log_ok "Agent decisions log copied to docs/Final Results/QMIX/"
+    log_ok "Agent decisions log copied to $DECISIONS_DEST"
 fi
 
 # ── Step 15: Summary ──
@@ -415,13 +541,13 @@ echo "  api: $R_API  |  app: $R_APP  |  db: $R_DB"
 echo ""
 
 echo -e "${YELLOW}Output files:${NC}"
-ls -lh "$WORKSPACE_DIR/docs/Final Results"/qmix_metrics_*.json 2>/dev/null | tail -5 || echo "  (none found)"
+ls -lh "$OUTPUT_DIR"/qmix_metrics_*.json 2>/dev/null | tail -5 || echo "  (none found)"
 echo ""
 echo -e "${YELLOW}CSV time-series:${NC}"
-ls -lh "$WORKSPACE_DIR/docs/Final Results"/*_over_time_qmix.csv 2>/dev/null | sed 's/^/  /' || echo "  (none found)"
+ls -lh "$OUTPUT_DIR"/*_over_time_qmix.csv 2>/dev/null | sed 's/^/  /' || echo "  (none found)"
 echo ""
 echo -e "${YELLOW}Agent decisions log:${NC}"
-ls -lh "$WORKSPACE_DIR/docs/Final Results/QMIX"/qmix_decisions_*.csv 2>/dev/null | tail -1 || echo "  (none found)"
+ls -lh "$OUTPUT_DIR/QMIX"/qmix_decisions_*.csv 2>/dev/null | tail -1 || echo "  (none found)"
 echo ""
 echo -e "${YELLOW}Full agent log:${NC} /tmp/qmix_agent.log"
 echo ""

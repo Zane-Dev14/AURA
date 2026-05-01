@@ -17,6 +17,30 @@ IST = timezone(timedelta(hours=5, minutes=30))
 def ist_time_str():
     return datetime.now(IST).strftime("%H:%M:%S")
 
+
+def get_current_kube_context():
+    try:
+        result = subprocess.run(
+            ["kubectl", "config", "current-context"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return None
+        context = result.stdout.strip()
+        return context or None
+    except Exception:
+        return None
+
+
+def assert_k3d_context():
+    context = get_current_kube_context()
+    if not context:
+        raise RuntimeError("kubectl current-context is empty. Refusing to run controller.")
+    if not context.startswith("k3d-"):
+        raise RuntimeError(f"Refusing to run controller on non-k3d context: {context}")
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
@@ -24,7 +48,9 @@ from marl.inference import AuraInference
 from deployment.builder import collect_metrics, build_observation, _hist, RPS_HISTORY
 
 CHECKPOINT_DIR = os.environ.get("AURA_CHECKPOINT_DIR", "marl/qmix_trained")
-PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:9090")
+# Prefer the kube-prometheus-stack NodePort exposed by local k3d setup.
+# You can override via PROMETHEUS_URL if using a different topology.
+PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://127.0.0.1:30090")
 NAMESPACE = "default"
 
 SERVICES = ["api", "app", "db"]
@@ -57,6 +83,23 @@ def log_scale_decision(svc, m, current, delta, target, shadow):
         flush=True
     )
 
+
+def app_needs_recovery(m):
+    """
+    Determine if APP tier needs recovery/scale-up.
+    Uses more sensitive thresholds to prevent stuck-at-1-replica scenarios.
+    """
+    return (
+        m.get("p99", 0) > P99_SLO * 0.7  # 350ms threshold (70% of 500ms SLO)
+        or m.get("error", 0) > 0.015      # 1.5% error rate
+        or m.get("queue", 0) > 15         # Lower queue threshold
+        or (m.get("p99", 0) > 300 and m.get("rps", 0) > 100)  # Combined pressure signal
+    )
+
+
+def api_is_bottleneck(m):
+    return m.get("desired", 0) >= MAX_REPLICAS and m.get("queue", 0) > 500
+
 def scale(service: str, replicas: int):
     min_r = MIN_REPLICAS.get(service, 1)
     max_r = MAX_REPLICAS
@@ -72,6 +115,8 @@ def scale(service: str, replicas: int):
     )
 
 def main():
+    assert_k3d_context()
+
     print("✅ AURA Agent Controller Started")
     print("🎭 Shadow mode:", SHADOW_MODE)
     print("📦 Checkpoints:", CHECKPOINT_DIR)
@@ -147,12 +192,22 @@ def main():
 
             # Veto 2: Tier-coupled (don't scale APP if API is bottleneck)
             if svc == "app" and actions[svc] > 0:
-                if "api" in metrics_cache:
-                    api_queue = metrics_cache["api"]["queue"]
-                    api_replicas = metrics_cache["api"]["desired"]
-                    if api_replicas >= MAX_REPLICAS and api_queue > 500:
-                        print(f"⚠️ TIER VETO: API bottleneck (q={api_queue:.0f}), blocking APP scale-up")
-                        actions[svc] = 0
+                api_metrics = metrics_cache.get("api", {})
+                if api_is_bottleneck(api_metrics) and not app_needs_recovery(m):
+                    print(
+                        f"⚠️ TIER VETO: API bottleneck (q={api_metrics.get('queue', 0):.0f}), "
+                        "blocking APP scale-up until APP shows pressure"
+                    )
+                    actions[svc] = 0
+
+            # Recovery override: never leave APP stuck at 1 replica when it is
+            # already breaching its own SLO or showing sustained queue/error pressure.
+            if svc == "app" and actions[svc] <= 0 and app_needs_recovery(m):
+                print(
+                    f"↺ APP RECOVERY OVERRIDE: p99={m.get('p99', 0):.0f}ms, "
+                    f"err={m.get('error', 0):.3f}, queue={m.get('queue', 0):.1f}"
+                )
+                actions[svc] = 1
 
             # Veto 3: Multi-tier SLO check with escape hatches (intelligent scale-down)
             if actions[svc] < 0:
