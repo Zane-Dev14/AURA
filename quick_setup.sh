@@ -56,6 +56,13 @@ kubectl apply -f infra/manifests/three-tier/app.yaml
 
 # Deploy ServiceMonitors
 echo "📈 Deploying ServiceMonitors..."
+# Ensure ServiceMonitor CRD exists (installed by Prometheus Operator)
+if ! kubectl get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1; then
+  echo "⚠️  ServiceMonitor CRD not found — installing Prometheus Operator CRDs..."
+  kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/bundle.yaml
+  echo "⏳ Waiting for CRDs to be registered..."
+  sleep 5
+fi
 kubectl apply -f infra/manifests/three-tier/servicemonitor.yaml
 
 # Deploy Locust

@@ -67,6 +67,22 @@ spec:
         ports:
           - containerPort: 8080
           - containerPort: 9901
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 9901
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /server_info
+            port: 9901
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
         volumeMounts:
           - name: envoy-config
             mountPath: /etc/envoy

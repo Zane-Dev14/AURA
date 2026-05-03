@@ -62,7 +62,8 @@ MIN_REPLICAS = {
 }
 
 MAX_REPLICAS = 5
-COOLDOWN_SEC = 30
+# Make QMIX more reactive than HPA for better performance
+COOLDOWN_SEC = int(os.environ.get("AURA_COOLDOWN_SEC", "15"))  # Reduced from 30 to 15
 
 SHADOW_MODE = os.environ.get("AURA_SHADOW_MODE", "true").lower() == "true"
 
