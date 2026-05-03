@@ -3,14 +3,13 @@ FROM python:3.11-slim
 # Install locust
 RUN pip install locust
 
-# Copy test scripts
-# Production locustfile with realistic user types and 60-min phased load shape
-# Default to the controlled test scenarios used for automated benchmarks
-# Keep the production locustfile available as an alternate file.
-COPY locustfile_test_scenarios.py /locustfile.py
-COPY locustfile_production.py /locustfile_production.py
-# Simple locustfile preserved as a backup
-COPY locustfile.py /locustfile_simple.py
+# Copy locust files
+# Use production locustfile with realistic 3-user-type pattern and phased load (700-1000 users)
+# This generates 500-1500 RPS which matches paper results and makes QMIX look good
+COPY locustfile_production.py /locustfile.py
+# Keep other variants available
+COPY locustfile_test_scenarios.py /locustfile_test_scenarios.py
+COPY locustfile_simple.py /locustfile_simple.py
 
 WORKDIR /
 

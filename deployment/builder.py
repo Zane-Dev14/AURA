@@ -4,7 +4,7 @@ import requests
 from collections import deque
 import os
 
-PROM_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:9090")
+PROM_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:30090")
 OBS_DIM = 16
 
 CPU_HISTORY = {}
@@ -12,7 +12,7 @@ RPS_HISTORY = {}
 
 def _hist(store, key):
     if key not in store:
-        store[key] = deque([0.0, 0.0], maxlen=2)
+        store[key] = deque([0.0] * 20, maxlen=20)  # 20 samples = 100 seconds of history
     return store[key]
 
 import math
@@ -35,16 +35,16 @@ def q(query: str) -> float:
     return 0.0
 
 def collect_metrics(service: str, ns="default"):
-    # Ingress RPS (ground truth)
+    # Ingress RPS (ground truth) - FIXED: use _completed not _total
     rps = q(f'''
-      sum(rate(envoy_http_downstream_rq_total{{
+      sum(rate(envoy_http_downstream_rq_completed{{
         namespace="{ns}",
         job="{service}",
         envoy_http_conn_manager_prefix="ingress"
       }}[1m]))
     ''')
 
-    # Always-safe average latency (ms)
+    # Always-safe average latency (ms) - FIXED: use _completed
     avg_latency = q(f'''
       sum(rate(envoy_http_downstream_rq_time_sum{{
         namespace="{ns}",
@@ -52,7 +52,7 @@ def collect_metrics(service: str, ns="default"):
         envoy_http_conn_manager_prefix="ingress"
       }}[1m]))
       /
-      sum(rate(envoy_http_downstream_rq_total{{
+      sum(rate(envoy_http_downstream_rq_completed{{
         namespace="{ns}",
         job="{service}",
         envoy_http_conn_manager_prefix="ingress"

@@ -48,7 +48,7 @@ from marl.inference import AuraInference
 from deployment.builder import collect_metrics, build_observation, _hist, RPS_HISTORY
 
 CHECKPOINT_DIR = os.environ.get("AURA_CHECKPOINT_DIR", "marl/qmix_trained")
-# Prefer the kube-prometheus-stack NodePort exposed by local k3d setup.
+# Prometheus is accessible on localhost:30090 (NodePort mapping)
 # You can override via PROMETHEUS_URL if using a different topology.
 PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://127.0.0.1:30090")
 NAMESPACE = "default"
@@ -62,8 +62,8 @@ MIN_REPLICAS = {
 }
 
 MAX_REPLICAS = 5
-# Make QMIX more reactive than HPA for better performance
-COOLDOWN_SEC = int(os.environ.get("AURA_COOLDOWN_SEC", "15"))  # Reduced from 30 to 15
+# Reduced cooldown for faster predictive response
+COOLDOWN_SEC = int(os.environ.get("AURA_COOLDOWN_SEC", "10"))  # 10s for proactive scaling
 
 SHADOW_MODE = os.environ.get("AURA_SHADOW_MODE", "true").lower() == "true"
 
@@ -71,15 +71,18 @@ LOG_DIR = "logs"
 LOG_FILE = os.path.join(LOG_DIR, "shadow_decisions.csv")
 
 
-def log_scale_decision(svc, m, current, delta, target, shadow):
+def log_scale_decision(svc, m, current, delta, target, shadow, rps_trend=0.0):
+    """Enhanced logging to show predictive behavior"""
+    trend_arrow = "↑" if rps_trend > 10 else ("↓" if rps_trend < -10 else "→")
+    trend_str = f"{trend_arrow}{abs(rps_trend):.0f}" if abs(rps_trend) > 1 else "~0"
+    
     print(
         f"[{svc.upper():<4}] "
         f"Δ={delta:+d} "
         f"{current}→{target} | "
-        f"p95={m.get('p95', 0):.3f} "
-        f"p99={m.get('p99', 0):.3f} | "
-        f"cpu={m.get('cpu', 0)*100:.1f}% "
-        f"rps={m.get('rps', 0):.1f} | "
+        f"rps={m.get('rps', 0):.1f} (trend:{trend_str} RPS/min) | "
+        f"p99={m.get('p99', 0):.1f}ms "
+        f"cpu={m.get('cpu', 0)*100:.0f}% | "
         f"{'SHADOW' if shadow else 'LIVE'}",
         flush=True
     )
@@ -178,18 +181,7 @@ def main():
                         print(f"⚠️ ELASTICITY VETO: {svc} scaling futile (Δrps={rps_gain:.1f})")
                         actions[svc] = 0
             
-            # Veto 1b: Aggressive scale-down override (for overtrained agents)
-            # If agent wants to scale up/maintain but conditions are excellent, force scale-down
-            if actions[svc] >= 0:  # Agent wants to maintain or scale up
-                current_replicas = int(m["desired"])
-                current_p99 = m["p99"]
-                current_rps = m.get("rps", 0) or 0
-                current_cpu = m.get("cpu", 0)
-                
-                # Force scale-down if: excellent latency + low load + high replicas
-                if (current_p99 < 50 and current_cpu < 0.6 and current_replicas > 2):
-                    print(f"🔧 OVERRIDE: {svc} forcing scale-down (p99={current_p99:.0f}ms, cpu={current_cpu*100:.0f}%, replicas={current_replicas} > 2)")
-                    actions[svc] = -1
+            # REMOVED: Aggressive scale-down override - let QMIX policy decide
 
             # Veto 2: Tier-coupled (don't scale APP if API is bottleneck)
             if svc == "app" and actions[svc] > 0:
@@ -262,13 +254,21 @@ def main():
             min_r = MIN_REPLICAS.get(svc, 1)
             target = max(min_r, min(MAX_REPLICAS, current + delta))
 
+            # Calculate RPS trend for predictive logging
+            rps_h = _hist(RPS_HISTORY, svc)
+            rps_trend = 0.0
+            if len(rps_h) >= 2:
+                # RPS change per minute (5s interval * 12 = 1 min)
+                rps_trend = (m["rps"] - rps_h[-2]) * 12
+
             log_scale_decision(
                 svc=svc,
                 m=m,
                 current=current,
                 delta=delta,
                 target=target,
-                shadow=SHADOW_MODE
+                shadow=SHADOW_MODE,
+                rps_trend=rps_trend
             )
 
             with open(LOG_FILE, "a") as f:
