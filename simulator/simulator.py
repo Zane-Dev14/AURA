@@ -557,12 +557,27 @@ class K8sSimulator:
             if svc.replicas_desired > 6:  # mid-range threshold
                 over_scaling_penalty += (svc.replicas_desired - 6) * 0.7
 
+        # NEW: Penalize action magnitude/frequency (instability)
+        action_frequency_penalty = 0.0
+        for svc in self.services.values():
+            if hasattr(svc, 'prev_replicas_desired') and svc.replicas_desired != svc.prev_replicas_desired:
+                action_frequency_penalty += abs(svc.replicas_desired - svc.prev_replicas_desired) * 5.0 # Penalty per step scaled
+
         reward = -(
             self.alpha * cost +
             self.beta * sla_violations +
             self.gamma * flapping +
-            0.3 * over_scaling_penalty   # NEW penalty
+            0.3 * over_scaling_penalty +
+            action_frequency_penalty
         )
+        
+        # NEW: Penalize late reactive scaling (scaling up ONLY after SLA breached)
+        for svc in self.services.values():
+            if svc.p95_latency_ms > self.sla_threshold_ms and svc.replicas_desired > getattr(svc, 'prev_replicas_desired', svc.replicas_desired):
+                reward -= 50.0  # Massive penalty for scaling *after* the spike instead of preemptively
+
+        for svc in self.services.values():
+            svc.prev_replicas_desired = svc.replicas_desired
 
         return reward
 

@@ -38,20 +38,19 @@ class UniversityUser(HttpUser):
 
     wait_time = between(1, 2)  # Default, overridden in on_start
 
+    
     def on_start(self):
         r = random.random()
-
         if r < 0.70:
             self.user_type = "light"
-            self.wait_time = MethodType(between(0.5, 1.5), self)
-
+            self.wait_time = MethodType(between(3, 8), self)   # casual browser
         elif r < 0.95:
             self.user_type = "regular"
-            self.wait_time = MethodType(between(1, 3), self)
-
+            self.wait_time = MethodType(between(1, 3), self)   # normal user
         else:
             self.user_type = "power"
-            self.wait_time = MethodType(between(0.1, 0.5), self)
+            self.wait_time = MethodType(between(0.2, 0.8), self)  # heavy but not insane
+
 
     @task(10)
     def view_homepage(self):
@@ -94,43 +93,35 @@ class UniversityUser(HttpUser):
 
 class ProductionDayShape(LoadTestShape):
     """
-    30-minute load shape: phased, realistic.
-    Returns (user_count, spawn_rate) or None to stop.
+    30-minute realistic production load shape.
     """
 
     def __init__(self):
         super().__init__()
-        # Simplified demo phases:
-        # First minute ramp to 300 users, then ramp to 500 users.
-        # The original detailed phase list is preserved below as a commented
-        # block in case you want to restore it later.
-        """
-        Original phased shape (kept for reference):
-        [
-            (180,  1000,  400),    # 0-3min:   ramp to 900 users
-            (480,  1000,  400),    # 3-8min:   hold at 900
-            (660,  2000,  500),    # 8-11min:  ramp to 1500 users
-            (960,  2000,  500),    # 11-16min: hold at 1500
-            (1140, 4000, 800),    # 16-19min: spike to 2500 users
-            (1440, 4000, 800),    # 19-24min: sustain peak 2500
-            (1620, 500,  300),    # 24-27min: drop to 500 users
-            (1800, 500,  100),    # 27-30min: hold at 500 (steady)
-        ]
-        """
 
-        # Demo: two hard phases for an aggressive demo load:
-        #  - 0-60s  -> ramp to 500 users at 350 users/sec (spawn rate)
-        #  - 60-120s -> ramp to 700 users at 500 users/sec (spawn rate)
-        # Keep user counts and spawn rates, lengthen phases to ~5 minutes total
         self.phases = [
-            (90, 700, 450),   # 0-150s -> ramp to 700 at 450/s
-            (300, 1000, 600),  # 150-300s -> ramp to 1000 at 600/s (ends ~5min)
+            # (end_time_sec, users, spawn_rate)
+
+            (180, 1000, 100),     # 0–3 min: ramp to 1000
+            (480, 1000, 50),     # 3–8 min: hold 1000
+
+            (660, 2000, 100),     # 8–11 min: ramp to 2000
+            (960, 2000, 50),     # 11–16 min: hold 2000
+
+            (1140, 4000, 300),  # 16–19 min: spike to 4000
+            (1440, 4000, 100),   # 19–24 min: sustain peak
+
+            (1620, 200, 200),   # 24–27 min: drop to 200
+            (1800, 200, 20),    # 27–30 min: steady low
         ]
 
     def tick(self):
         run_time = self.get_run_time()
+
         for end_t, users, spawn in self.phases:
             if run_time <= end_t:
                 return users, spawn
+
         return None
 
+# Made with Bob

@@ -6,7 +6,11 @@ servers: 1
 agents: 3
 ports:
   - port: 30090:30090 # Prometheus
+    nodeFilters:
+      - loadbalancer
   - port: 32322:32322 # Grafana
+    nodeFilters:
+      - loadbalancer
   - port: 30089:30089 # Locust
 options:
   k3s:

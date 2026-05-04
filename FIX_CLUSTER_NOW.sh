@@ -44,8 +44,8 @@ options:
   runtime:
     ulimits:
       - name: nofile
-        soft: 1000000
-        hard: 1000000
+        soft: 65536
+        hard: 65536
 EOF
 
 k3d cluster create --config /tmp/k3d-cluster-fixed.yaml
@@ -79,24 +79,42 @@ while [ $elapsed -lt $timeout ]; do
         break
     fi
     sleep 2
-    elapsed=$((elapsed + 2))
-    echo -n "."
+  elapsed=$((elapsed + 2))
+  echo -n "."
 done
 echo ""
 
 if [ "$ready_count" -ne "4" ]; then
-    echo "[ERROR] Timeout waiting for nodes to be Ready"
-    exit 1
+  echo "[ERROR] Timeout waiting for nodes to be Ready"
+  exit 1
 fi
 
-# Step 6: Deploy services
-echo "[INFO] Step 6: Deploying services..."
+# Step 6: Install Prometheus / Grafana stack
+echo "[INFO] Step 6: Installing kube-prometheus-stack..."
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null 2>&1 || true
+helm repo update >/dev/null
+
+if ! kubectl get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1; then
+  echo "[INFO]   Installing Prometheus Operator CRDs..."
+  kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/bundle.yaml >/dev/null
+  sleep 5
+fi
+
+helm upgrade --install kube-prom prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace \
+  --values metrics/prometheus/prometheus-values.yaml \
+  --wait --timeout 10m
+echo "[INFO] ✓ kube-prometheus-stack installed"
+echo ""
+
+# Step 7: Deploy services
+echo "[INFO] Step 7: Deploying services..."
 bash tools/deploy_stack.sh
 echo "[INFO] ✓ Services deployed"
 echo ""
 
-# Step 7: Import Docker images
-echo "[INFO] Step 7: Importing Docker images..."
+# Step 8: Import Docker images
+echo "[INFO] Step 8: Importing Docker images..."
 for image in project-api:local project-app:local project-db:local; do
     if docker images | grep -q "${image%:*}.*${image#*:}"; then
         echo "[INFO]   Importing $image..."
@@ -108,15 +126,15 @@ done
 echo "[INFO] ✓ Images imported"
 echo ""
 
-# Step 8: Force pod recreation
-echo "[INFO] Step 8: Forcing pod recreation to use new images..."
+# Step 9: Force pod recreation
+echo "[INFO] Step 9: Forcing pod recreation to use new images..."
 kubectl delete pods --all -n default --force --grace-period=0 2>/dev/null || true
 echo "[INFO] ✓ Pods deleted, waiting for recreation..."
 sleep 10
 echo ""
 
-# Step 9: Wait for all pods to be ready
-echo "[INFO] Step 9: Waiting for all pods to be Ready..."
+# Step 10: Wait for all pods to be ready
+echo "[INFO] Step 10: Waiting for all pods to be Ready..."
 timeout=180
 elapsed=0
 while [ $elapsed -lt $timeout ]; do
@@ -131,8 +149,8 @@ while [ $elapsed -lt $timeout ]; do
 done
 echo ""
 
-# Step 10: Verify Prometheus and Locust
-echo "[INFO] Step 10: Verifying services..."
+# Step 11: Verify Prometheus and Grafana
+echo "[INFO] Step 11: Verifying services..."
 echo "[INFO]   Checking Prometheus (http://localhost:30090)..."
 if curl -s http://localhost:30090/-/healthy > /dev/null 2>&1; then
     echo "[INFO]   ✓ Prometheus is accessible"
@@ -140,11 +158,11 @@ else
     echo "[WARN]   Prometheus not yet accessible (may need more time)"
 fi
 
-echo "[INFO]   Checking Locust (http://localhost:32322)..."
+echo "[INFO]   Checking Grafana (http://localhost:32322)..."
 if curl -s http://localhost:32322 > /dev/null 2>&1; then
-    echo "[INFO]   ✓ Locust is accessible"
+    echo "[INFO]   ✓ Grafana is accessible"
 else
-    echo "[WARN]   Locust not yet accessible (may need more time)"
+    echo "[WARN]   Grafana not yet accessible (may need more time)"
 fi
 echo ""
 

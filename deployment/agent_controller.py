@@ -11,6 +11,10 @@ from datetime import datetime, timedelta, timezone
 P99_SLO = float(os.environ.get("AURA_P99_SLO", "500"))  # ms
 P99_WINDOW = os.environ.get("AURA_P99_WINDOW", "5m")
 QUEUE_METRIC_ENABLED = os.environ.get("AURA_QUEUE_METRIC_ENABLED", "true").lower() == "true"
+APP_RECOVERY_P99 = float(os.environ.get("AURA_APP_RECOVERY_P99", "150"))  # ms
+APP_RECOVERY_RPS = float(os.environ.get("AURA_APP_RECOVERY_RPS", "120"))
+APP_RECOVERY_ERROR = float(os.environ.get("AURA_APP_RECOVERY_ERROR", "0.01"))
+APP_RECOVERY_QUEUE = float(os.environ.get("AURA_APP_RECOVERY_QUEUE", "10"))
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -62,8 +66,15 @@ MIN_REPLICAS = {
 }
 
 MAX_REPLICAS = 5
-# Reduced cooldown for faster predictive response
-COOLDOWN_SEC = int(os.environ.get("AURA_COOLDOWN_SEC", "10"))  # 10s for proactive scaling
+# Asymmetric cooldowns: keep scale-up responsive, slow down scale-down
+SCALE_UP_COOLDOWN_SEC = int(os.environ.get("AURA_SCALE_UP_COOLDOWN_SEC", "60"))  # increased to 60s for stabilization
+SCALE_DOWN_COOLDOWN_SEC = int(os.environ.get("AURA_SCALE_DOWN_COOLDOWN_SEC", "30"))
+
+# Minimal scale-up assist (keeps QMIX as primary, only resolves obvious suppression)
+SCALEUP_P99_TRIGGER_MS = float(os.environ.get("AURA_SCALEUP_P99_TRIGGER_MS", "250"))
+SCALEUP_CPU_FLOOR = float(os.environ.get("AURA_SCALEUP_CPU_FLOOR", "0.40"))
+SCALEUP_TREND_TRIGGER = float(os.environ.get("AURA_SCALEUP_TREND_TRIGGER", "200"))  # RPS/min
+ELASTICITY_VETO_GRACE_SEC = int(os.environ.get("AURA_ELASTICITY_VETO_GRACE_SEC", "300"))
 
 SHADOW_MODE = os.environ.get("AURA_SHADOW_MODE", "true").lower() == "true"
 
@@ -91,13 +102,15 @@ def log_scale_decision(svc, m, current, delta, target, shadow, rps_trend=0.0):
 def app_needs_recovery(m):
     """
     Determine if APP tier needs recovery/scale-up.
-    Uses more sensitive thresholds to prevent stuck-at-1-replica scenarios.
+    Uses aggressive but still load-based thresholds to prevent stuck-at-1-replica
+    scenarios when the app is visibly overloaded.
     """
     return (
-        m.get("p99", 0) > P99_SLO * 0.7  # 350ms threshold (70% of 500ms SLO)
-        or m.get("error", 0) > 0.015      # 1.5% error rate
-        or m.get("queue", 0) > 15         # Lower queue threshold
-        or (m.get("p99", 0) > 300 and m.get("rps", 0) > 100)  # Combined pressure signal
+        m.get("p99", 0) >= APP_RECOVERY_P99
+        or m.get("rps", 0) >= APP_RECOVERY_RPS
+        or m.get("error", 0) >= APP_RECOVERY_ERROR
+        or m.get("queue", 0) >= APP_RECOVERY_QUEUE
+        or (m.get("p99", 0) >= 100 and m.get("rps", 0) >= 80 and m.get("cpu", 0) >= 0.75)
     )
 
 
@@ -134,13 +147,14 @@ def main():
     print("✅ MARL inference loaded")
 
 
-    last_action_time = 0.0
+    controller_start_time = time.time()
+    last_up_action_time = {}
+    last_down_action_time = {}
+    trend_strikes = {}
+    last_scale_state = {}
 
     while True:
         time.sleep(5)
-
-        if time.time() - last_action_time < COOLDOWN_SEC:
-            continue
 
         obs = {}
         metrics_cache = {}
@@ -166,101 +180,111 @@ def main():
             continue
 
         # ==============================
-        # VETOES (No new observations)
+        # PREDICTIVE AUGMENTATION & VETOES
         # ==============================
 
+        # ==============================
+        # FUSED CONTROL LOGIC (Target Replicas & Action Deduplication)
+        # ==============================
+
+        import math
+        
         for svc in SERVICES:
             m = metrics_cache[svc]
-
-            # Veto 1: Elasticity check (don't scale if not helping)
-            if actions[svc] > 0:  # Trying to scale up
-                rps_h = _hist(RPS_HISTORY, svc)
-                if len(rps_h) >= 2:
-                    rps_gain = m["rps"] - rps_h[-2]
-                    if rps_gain <= 0 and m["rps"] > 100:
-                        print(f"⚠️ ELASTICITY VETO: {svc} scaling futile (Δrps={rps_gain:.1f})")
-                        actions[svc] = 0
-            
-            # REMOVED: Aggressive scale-down override - let QMIX policy decide
-
-            # Veto 2: Tier-coupled (don't scale APP if API is bottleneck)
-            if svc == "app" and actions[svc] > 0:
-                api_metrics = metrics_cache.get("api", {})
-                if api_is_bottleneck(api_metrics) and not app_needs_recovery(m):
-                    print(
-                        f"⚠️ TIER VETO: API bottleneck (q={api_metrics.get('queue', 0):.0f}), "
-                        "blocking APP scale-up until APP shows pressure"
-                    )
-                    actions[svc] = 0
-
-            # Recovery override: never leave APP stuck at 1 replica when it is
-            # already breaching its own SLO or showing sustained queue/error pressure.
-            if svc == "app" and actions[svc] <= 0 and app_needs_recovery(m):
-                print(
-                    f"↺ APP RECOVERY OVERRIDE: p99={m.get('p99', 0):.0f}ms, "
-                    f"err={m.get('error', 0):.3f}, queue={m.get('queue', 0):.1f}"
-                )
-                actions[svc] = 1
-
-            # Veto 3: Multi-tier SLO check with escape hatches (intelligent scale-down)
-            if actions[svc] < 0:
-                current_p99 = m["p99"]
-                current_rps = m.get("rps", 0) or 0
-                
-                # Tier A - ESCAPE HATCH 1: No traffic (allow scale-down immediately)
-                if current_rps < 50:
-                    print(f"✓ SCALE-DOWN ALLOWED: {svc} - Low traffic (rps={current_rps:.0f} < 50)")
-                
-                # Tier B - ESCAPE HATCH 2: Current state excellent (allow scale-down)
-                elif current_p99 < 100:
-                    print(f"✓ SCALE-DOWN ALLOWED: {svc} - Excellent latency (p99={current_p99:.0f}ms < 100ms)")
-                
-                # Tier C - MARGINAL ZONE: Allow with warning (100 ≤ p99 < 500)
-                elif current_p99 < 500:
-                    print(f"⚠️  SCALE-DOWN MARGINAL: {svc} - Acceptable latency (p99={current_p99:.0f}ms in [100,500)ms)")
-                
-                # Tier D - SLO BREACH ZONE: Check smoothed metrics before blocking
-                else:  # current_p99 >= 500
-                    try:
-                        prom_query = f"avg_over_time(histogram_quantile(0.99, sum by (le) (increase(envoy_http_downstream_rq_time_bucket{{namespace=\"{NAMESPACE}\",job=\"{svc}\",envoy_http_conn_manager_prefix=\"ingress\"}}[2m])))[{P99_WINDOW}])"
-                        smoothed_p99 = requests.get(
-                            f"{PROMETHEUS_URL}/api/v1/query",
-                            params={"query": prom_query},
-                            timeout=5
-                        ).json()
-                        if smoothed_p99["data"]["result"]:
-                            smoothed_p99_val = float(smoothed_p99["data"]["result"][0]["value"][1])
-                        else:
-                            smoothed_p99_val = current_p99
-                    except Exception:
-                        smoothed_p99_val = current_p99
-                    
-                    # Only block if smoothed average confirms sustained violation
-                    if smoothed_p99_val > P99_SLO:
-                        print(f"🚫 SLO VETO: {svc} - Sustained violation (smoothed={smoothed_p99_val:.0f}ms, current={current_p99:.0f}ms, SLO={P99_SLO}ms)")
-                        actions[svc] = 0
-                    else:
-                        print(f"✓ SCALE-DOWN ALLOWED: {svc} - Escape Hatch 3 (spike recovered: smoothed={smoothed_p99_val:.0f}ms ≤ SLO, current={current_p99:.0f}ms)")
-
-        # ==============================
-        # Apply actions
-        # ==============================
-
-        for svc in SERVICES:
-            m = metrics_cache[svc]
-
-            current = int(m["desired"])
-            delta = max(-1, min(1, actions[svc]))
-            min_r = MIN_REPLICAS.get(svc, 1)
-            target = max(min_r, min(MAX_REPLICAS, current + delta))
-
-            # Calculate RPS trend for predictive logging
+            current = int(m.get("desired", 1))
+            elapsed = time.time() - controller_start_time
             rps_h = _hist(RPS_HISTORY, svc)
+            
+            # Feature extraction
             rps_trend = 0.0
-            if len(rps_h) >= 2:
-                # RPS change per minute (5s interval * 12 = 1 min)
-                rps_trend = (m["rps"] - rps_h[-2]) * 12
+            if len(rps_h) >= 3:
+                rps_trend = (m.get("rps", 0) - rps_h[-2]) * 12
 
+            # 1. MARL Target
+            marl_delta = max(-1, min(1, actions[svc]))
+            marl_target = current + marl_delta
+
+            # 2. Predictive Target (Capacity-based + Hysteresis)
+            predictive_target = 0
+            CAPACITY_PER_POD = 120.0  # safe heuristic
+            
+            if rps_trend > 150 and m.get("cpu", 0) > 0.40:
+                trend_strikes[svc] = trend_strikes.get(svc, 0) + 1
+            else:
+                trend_strikes[svc] = max(0, trend_strikes.get(svc, 0) - 1)
+
+            if trend_strikes.get(svc, 0) >= 2:
+                # Forecast load 1 minute ahead based on trend, calculate total capacity needed
+                predicted_rps = m.get("rps", 0) + rps_trend
+                predictive_target = int(math.ceil(predicted_rps / CAPACITY_PER_POD))
+                print(f"🚀 PREDICTIVE TARGET: {svc} (trend={rps_trend:.0f} RPS/m, target_reps={predictive_target})")
+                trend_strikes[svc] = 0  # reset hysteresis 
+
+            # 3. Reactive Safety Target (Overrides)
+            override_target = 0
+            if m.get("p99", 0) > 400.0 and m.get("cpu", 0) > 0.60:
+                print(f"↺ SAFETY NET: {svc} forcing +1 (p99 > 400ms)")
+                override_target = current + 1
+            if svc == "app" and app_needs_recovery(m):
+                print(f"↺ APP RECOVERY OVERRIDE activated")
+                override_target = current + 1
+
+            # 4. Merge Controllers BEFORE actuation (Max of all models)
+            desired_target = max(marl_target, predictive_target, override_target)
+
+            # 5. Enforce Elasticity Veto, Downscale Guards & Bottleneck Detection
+            if desired_target > current:
+                # A) Bottleneck Classifier: if High Latency + Low CPU + Stable RPS ⇒ External Bottleneck
+                if m.get("p99", 0) > 300.0 and m.get("cpu", 0) < 0.45 and abs(rps_trend) < 50:
+                    print(f"🛑 EXTERNAL BOTTLENECK DETECTED: {svc} (p99={m.get('p99',0):.0f}ms, cpu={m.get('cpu',0)*100:.0f}%, flat RPS). Blocking scale-up.")
+                    desired_target = current
+                
+                # B) Convergence Guard (Marginal Gain Check)
+                if desired_target > current and svc in last_scale_state:
+                    prev_state = last_scale_state[svc]
+                    # if we scaled up recently and p99 didn't improve by at least 5%
+                    if prev_state["dir"] > 0 and m.get("p99", 0) >= prev_state["p99"] * 0.95 and m.get("p99", 0) > 150:
+                        print(f"🛑 CONVERGENCE GUARD: {svc} previous +1 replica yielded <5% latency improvement (was {prev_state['p99']:.0f}ms). Stopping runaway scaling.")
+                        desired_target = current
+
+                # C) Elasticity veto: scaling up but not generating more RPS
+                if desired_target > current and len(rps_h) >= 2:
+                    rps_gain = m.get("rps", 0) - rps_h[-2]
+                    if (elapsed >= ELASTICITY_VETO_GRACE_SEC and rps_gain <= 0 
+                        and m.get("rps", 0) > 100 and m.get("p99", 0) < SCALEUP_P99_TRIGGER_MS 
+                        and m.get("cpu", 0) < SCALEUP_CPU_FLOOR):
+                        print(f"⚠️ ELASTICITY VETO: {svc} scaling futile (Δrps={rps_gain:.1f})")
+                        desired_target = current
+                        
+                # D) Tier-coupled veto (don't scale APP if API is bottleneck)
+                if svc == "app" and desired_target > current:
+                    api_metrics = metrics_cache.get("api", {})
+                    if api_is_bottleneck(api_metrics) and not app_needs_recovery(m):
+                        print(f"⚠️ TIER VETO: API bottleneck, blocking APP scale-up")
+                        desired_target = current
+
+            elif desired_target < current:
+                # Strict downscale blocked check
+                cpu_pct = m.get("cpu", 0) * 100
+                current_rps = m.get("rps", 0)
+                if cpu_pct > 70 or current_rps > 50 or rps_trend > 0:
+                    print(f"🚫 DOWNSCALE BLOCKED: {svc} (cpu={cpu_pct:.0f}%, rps={current_rps:.1f}, trend={rps_trend:.1f})")
+                    desired_target = current
+
+            # 6. Target clamping and Action Deduplication (Per-Service Cooldown)
+            min_r = MIN_REPLICAS.get(svc, 1)
+            target = max(min_r, min(MAX_REPLICAS, desired_target))
+            delta = target - current
+
+            now = time.time()
+            if delta > 0 and (now - last_up_action_time.get(svc, 0.0)) < SCALE_UP_COOLDOWN_SEC:
+                delta = 0
+                target = current
+            if delta < 0 and (now - last_down_action_time.get(svc, 0.0)) < SCALE_DOWN_COOLDOWN_SEC:
+                delta = 0
+                target = current
+
+            # Apply
             log_scale_decision(
                 svc=svc,
                 m=m,
@@ -283,9 +307,19 @@ def main():
 
             if not SHADOW_MODE and target != current:
                 scale(svc, target)
+                last_scale_state[svc] = {
+                    "time": now, 
+                    "dir": delta, 
+                    "p99": m.get("p99", 0), 
+                    "target": target
+                }
+                if delta > 0:
+                    last_up_action_time[svc] = now
+                elif delta < 0:
+                    last_down_action_time[svc] = now
 
         print("\n" + "="*80 + "\n")
-        last_action_time = time.time()
+        # loop cadence controlled by sleep(5); per-direction cooldowns gate action frequency
 
 if __name__ == "__main__":
     main()

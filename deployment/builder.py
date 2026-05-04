@@ -43,6 +43,17 @@ def collect_metrics(service: str, ns="default"):
         envoy_http_conn_manager_prefix="ingress"
       }}[1m]))
     ''')
+    # If job-label query returns effectively zero, try a pod-name regex fallback
+    if not rps or rps < 1.0:
+        rps_alt = q(f'''
+          sum(rate(envoy_http_downstream_rq_completed{{
+            namespace="{ns}",
+            pod=~"{service}-.*",
+            envoy_http_conn_manager_prefix="ingress"
+          }}[1m]))
+        ''')
+        if rps_alt and rps_alt > rps:
+            rps = rps_alt
 
     # Always-safe average latency (ms) - FIXED: use _completed
     avg_latency = q(f'''
@@ -131,6 +142,17 @@ def collect_metrics(service: str, ns="default"):
             envoy_http_conn_manager_prefix="ingress"
           }})
         ''')
+        # fallback to pod regex if queue is zero but RPS indicates traffic
+        if (not queue or queue == 0) and rps and rps > 0:
+            queue_alt = q(f'''
+              avg(envoy_http_downstream_rq_active{{
+                namespace="{ns}",
+                pod=~"{service}-.*",
+                envoy_http_conn_manager_prefix="ingress"
+              }})
+            ''')
+            if queue_alt and queue_alt > queue:
+                queue = queue_alt
 
     return {
         "cpu": q(f'''

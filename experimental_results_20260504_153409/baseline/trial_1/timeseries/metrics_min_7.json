@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-05-04T15:42:32.374911",
+  "mode": "baseline",
+  "trial": 1,
+  "duration_minutes": 30,
+  "services": {
+    "api": {
+      "replicas": 1.0,
+      "rps": 231.06666666666663,
+      "p99_ms": 14.552901785714333,
+      "p95_ms": 4.710737362219689,
+      "error_rate": 0.0,
+      "cpu_cores": 0.20943122635820413,
+      "sla_violation_rate": 0.0
+    },
+    "app": {
+      "replicas": 1.0,
+      "rps": 230.86666666666665,
+      "p99_ms": 15.493277310924244,
+      "p95_ms": 4.876100573445081,
+      "error_rate": 0.0,
+      "cpu_cores": 0.13504992722537176,
+      "sla_violation_rate": 0.0
+    },
+    "db": {
+      "replicas": 1.0,
+      "rps": 0.0,
+      "p99_ms": 0.0,
+      "p95_ms": 0.0,
+      "error_rate": 0.0,
+      "cpu_cores": 0.010104543822218433,
+      "sla_violation_rate": 0.0
+    }
+  }
+}

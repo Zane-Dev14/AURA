@@ -31,8 +31,8 @@ COOLDOWN_SECONDS=180  # 3 minutes between trials
 LOCUST_USERS=150      # Optimized for M4 Max
 LOCUST_SPAWN_RATE=15
 LOCUST_HOST="http://api:8080"
-PROMETHEUS_URL="http://127.0.0.1:30090"
-LOCUST_URL="http://127.0.0.1:30089"
+PROMETHEUS_URL="http://127.0.0.1:9090"
+LOCUST_URL="http://127.0.0.1:8089"
 
 # Python venv
 VENV_PATH=".venv"
@@ -205,13 +205,30 @@ for svc in ["api", "app", "db"]:
         }}[2m]))
     ''')
     
+    # SLA violations (>50ms approx)
+    # Total rate minus rate of le="50"
+    sla_violation_rate = query_prom(f'''
+        sum(rate(envoy_http_downstream_rq_time_bucket{{
+            namespace="{NAMESPACE}",
+            job="{svc}",
+            envoy_http_conn_manager_prefix="ingress",
+            le="+Inf"
+        }}[1m])) - sum(rate(envoy_http_downstream_rq_time_bucket{{
+            namespace="{NAMESPACE}",
+            job="{svc}",
+            envoy_http_conn_manager_prefix="ingress",
+            le="50"
+        }}[1m]))
+    ''')
+    
     metrics["services"][svc] = {
         "replicas": replicas,
         "rps": rps,
         "p99_ms": p99,
         "p95_ms": p95,
         "error_rate": error_rate,
-        "cpu_cores": cpu
+        "cpu_cores": cpu,
+        "sla_violation_rate": sla_violation_rate
     }
 
 # Save metrics
@@ -222,33 +239,40 @@ print(f"✓ Metrics saved to $output_file")
 EOF
 }
 
-# Start Locust load test
-start_locust() {
-    log_info "Starting Locust load test: $LOCUST_USERS users, spawn rate $LOCUST_SPAWN_RATE/sec"
+# Restart Locust pod to trigger fresh LoadTestShape run
+restart_locust() {
+    log_info "Restarting Locust pod to trigger fresh LoadTestShape..."
+    kubectl delete pod -l app=locust
+    kubectl wait --for=condition=ready pod -l app=locust --timeout=120s
+    sleep 10
     
-    curl -s -X POST "$LOCUST_URL/swarm" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "user_count=$LOCUST_USERS&spawn_rate=$LOCUST_SPAWN_RATE&host=$LOCUST_HOST" \
-        > /dev/null
-    
-    if [ $? -eq 0 ]; then
-        log_info "Locust load test started successfully ✓"
-        sleep 5
-        return 0
-    else
-        log_error "Failed to start Locust load test"
-        return 1
-    fi
-}
-
-# Stop Locust load test
-stop_locust() {
-    log_info "Stopping Locust load test..."
-    curl -s -X GET "$LOCUST_URL/stop" > /dev/null
+    log_info "Re-establishing Locust port-forward..."
+    pkill -f "kubectl port-forward.*8089" || true
+    nohup kubectl port-forward --address 0.0.0.0 svc/locust 8089:8089 > locust_pf.log 2>&1 &
     sleep 5
-    log_info "Locust stopped ✓"
+    
+    log_info "Locust pod restarted, LoadTestShape will auto-start ✓"
 }
+start_locust_shape() {
+    log_info "Starting Locust LoadTestShape..."
 
+    # Use kubectl exec to reliably trigger locust from inside its own pod
+    # Bypasses local port-forwarding drop issues.
+    local locust_pod=$(kubectl get pod -l app=locust -o jsonpath='{.items[0].metadata.name}')
+    
+    # Wait until the web server is up and returns 200 to the post request
+    for i in {1..10}; do
+        local status_code=$(kubectl exec "$locust_pod" -- python -c "import requests; print(requests.post('http://localhost:8089/swarm', data={'user_count':1, 'spawn_rate':1, 'host':'http://app:8080'}).status_code)" 2>/dev/null)
+        if [ "$status_code" = "200" ]; then
+            log_info "Locust LoadTestShape triggered ✓"
+            return 0
+        fi
+        sleep 2
+    done
+
+    log_error "Failed to trigger Locust swarm (Python requests failed inside pod)"
+    exit 1
+}
 # Reset all deployments to 1 replica
 reset_deployments() {
     log_info "Resetting all deployments to 1 replica..."
@@ -256,6 +280,11 @@ reset_deployments() {
         kubectl scale deployment $svc --replicas=1 --timeout=60s
     done
     sleep 30
+    
+    # Ensure they are ready before proceeding
+    wait_for_pods "api" 1
+    wait_for_pods "app" 1
+    wait_for_pods "db" 1
     
     # Verify reset
     for svc in api app db; do
@@ -354,18 +383,30 @@ log_info "All services deployed ✓"
 # Check Prometheus is accessible
 log_info "Checking Prometheus..."
 if ! curl -s "$PROMETHEUS_URL/-/healthy" | grep -q "Prometheus"; then
-    log_error "Prometheus not accessible at $PROMETHEUS_URL"
-    log_error "Check: kubectl get svc -n monitoring | grep prometheus"
-    exit 1
+    log_info "Prometheus not locally accessible at $PROMETHEUS_URL. Attempting to setup port-forward..."
+    pkill -f "kubectl port-forward.*9090" || true
+    nohup kubectl port-forward -n monitoring --address 0.0.0.0 svc/kube-prom-kube-prometheus-prometheus 9090:9090 > prometheus_pf.log 2>&1 &
+    sleep 5
+    if ! curl -s "$PROMETHEUS_URL/-/healthy" | grep -q "Prometheus"; then
+        log_error "Prometheus still not accessible at $PROMETHEUS_URL after port-forward attempt"
+        log_error "Check: kubectl get svc -n monitoring | grep prometheus"
+        exit 1
+    fi
 fi
 log_info "Prometheus accessible ✓"
 
 # Check Locust is accessible
 log_info "Checking Locust..."
 if ! curl -s "$LOCUST_URL" | grep -q "Locust"; then
-    log_error "Locust not accessible at $LOCUST_URL"
-    log_error "Check: kubectl get pod -l app=locust"
-    exit 1
+    log_info "Locust not locally accessible at $LOCUST_URL. Attempting to setup port-forward..."
+    pkill -f "kubectl port-forward.*8089" || true
+    nohup kubectl port-forward --address 0.0.0.0 svc/locust 8089:8089 > locust_pf.log 2>&1 &
+    sleep 5
+    if ! curl -s "$LOCUST_URL" | grep -q "Locust"; then
+        log_error "Locust still not accessible at $LOCUST_URL after port-forward attempt"
+        log_error "Check: kubectl get pod -l app=locust"
+        exit 1
+    fi
 fi
 log_info "Locust accessible ✓"
 
@@ -394,25 +435,31 @@ for trial in 1 2 3; do
     delete_hpa
     reset_deployments
     
-    # Wait for stability
-    log_info "Waiting for system to stabilize (60 seconds)..."
-    sleep 60
-    
-    # Start load test
-    start_locust || exit 1
+    # Restart Locust to trigger fresh LoadTestShape
+    restart_locust
+    sleep 30
+    start_locust_shape
+    kubectl logs -l app=locust --tail=20
+    # LoadTestShape auto-starts immediately
+    log_info "ProductionDayShape started automatically (30-min phased load)"
     
     # Run for trial duration with progress updates
     log_info "Running baseline trial $trial for $TRIAL_DURATION_MINUTES minutes..."
     log_info "Progress: 0% (0/$TRIAL_DURATION_MINUTES minutes)"
     
+    mkdir -p "$TRIAL_DIR/timeseries"
     for i in $(seq 1 $TRIAL_DURATION_MINUTES); do
         sleep 60
         progress=$((i * 100 / TRIAL_DURATION_MINUTES))
         log_info "Progress: $progress% ($i/$TRIAL_DURATION_MINUTES minutes)"
+        collect_metrics "baseline" $trial "$TRIAL_DIR/timeseries/metrics_min_${i}.json" &
     done
     
-    # Stop load test
-    stop_locust
+    wait
+    
+    # LoadTestShape stops automatically after 30 minutes
+    log_info "Waiting for LoadTestShape to complete (30 seconds grace period)..."
+    sleep 30
     
     # Collect metrics
     collect_metrics "baseline" $trial "$TRIAL_DIR/metrics.json"
@@ -512,13 +559,20 @@ for trial in 1 2 3; do
     sleep 30
     kubectl get hpa
     
-    # Start load test
-    start_locust || exit 1
+    # Restart Locust to trigger fresh LoadTestShape
+    restart_locust
+    sleep 30
+    start_locust_shape
+    kubectl logs -l app=locust --tail=20
+    
+    # LoadTestShape auto-starts immediately
+    log_info "ProductionDayShape started automatically (30-min phased load)"
     
     # Run for trial duration with progress updates
     log_info "Running HPA trial $trial for $TRIAL_DURATION_MINUTES minutes..."
     log_info "Progress: 0% (0/$TRIAL_DURATION_MINUTES minutes)"
     
+    mkdir -p "$TRIAL_DIR/timeseries"
     for i in $(seq 1 $TRIAL_DURATION_MINUTES); do
         sleep 60
         progress=$((i * 100 / TRIAL_DURATION_MINUTES))
@@ -529,10 +583,15 @@ for trial in 1 2 3; do
             echo "=== Minute $i ===" >> "$TRIAL_DIR/hpa_status.log"
             kubectl get hpa >> "$TRIAL_DIR/hpa_status.log"
         fi
+        
+        collect_metrics "hpa" $trial "$TRIAL_DIR/timeseries/metrics_min_${i}.json" &
     done
     
-    # Stop load test
-    stop_locust
+    wait
+    
+    # LoadTestShape stops automatically after 30 minutes
+    log_info "Waiting for LoadTestShape to complete (30 seconds grace period)..."
+    sleep 30
     
     # Collect metrics
     collect_metrics "hpa" $trial "$TRIAL_DIR/metrics.json"
@@ -586,7 +645,7 @@ for trial in 1 2 3; do
     CONTROLLER_PID=$!
     
     log_info "QMIX controller started (PID: $CONTROLLER_PID)"
-    sleep 10
+    sleep 45
     
     # Verify controller is running
     if ! ps -p $CONTROLLER_PID > /dev/null; then
@@ -596,13 +655,20 @@ for trial in 1 2 3; do
     fi
     log_info "Controller verified running ✓"
     
-    # Start load test
-    start_locust || exit 1
+    # Restart Locust to trigger fresh LoadTestShape
+    restart_locust
+    sleep 30
+    start_locust_shape
+    kubectl logs -l app=locust --tail=20
+    
+    # LoadTestShape auto-starts immediately
+    log_info "ProductionDayShape started automatically (30-min phased load)"
     
     # Run for trial duration with progress updates
     log_info "Running QMIX trial $trial for $TRIAL_DURATION_MINUTES minutes..."
     log_info "Progress: 0% (0/$TRIAL_DURATION_MINUTES minutes)"
     
+    mkdir -p "$TRIAL_DIR/timeseries"
     for i in $(seq 1 $TRIAL_DURATION_MINUTES); do
         sleep 60
         progress=$((i * 100 / TRIAL_DURATION_MINUTES))
@@ -619,15 +685,21 @@ for trial in 1 2 3; do
             log_error "Controller died! Check $TRIAL_DIR/controller.log"
             exit 1
         fi
+        
+        collect_metrics "qmix" $trial "$TRIAL_DIR/timeseries/metrics_min_${i}.json" &
     done
     
-    # Stop load test
-    stop_locust
+    wait
+    
+    # LoadTestShape stops automatically after 30 minutes
+    log_info "Waiting for LoadTestShape to complete (30 seconds grace period)..."
+    sleep 30
     
     # Stop controller gracefully
     log_info "Stopping QMIX controller..."
-    kill $CONTROLLER_PID 2>/dev/null || true
+    kill -TERM $CONTROLLER_PID 2>/dev/null || true
     sleep 5
+    kill -9 $CONTROLLER_PID 2>/dev/null || true
     
     # Collect metrics
     collect_metrics "qmix" $trial "$TRIAL_DIR/metrics.json"
@@ -674,10 +746,21 @@ results_dir = "$RESULTS_DIR"
 def load_metrics(mode):
     metrics = []
     for trial in [1, 2, 3]:
-        path = f"{results_dir}/{mode}/trial_{trial}/metrics.json"
-        if os.path.exists(path):
-            with open(path) as f:
-                metrics.append(json.load(f))
+        trial_metrics = []
+        # Focus on peak load phase (minutes 16-24) where users=4000
+        for i in range(17, 25): 
+            path = f"{results_dir}/{mode}/trial_{trial}/timeseries/metrics_min_{i}.json"
+            if os.path.exists(path):
+                with open(path) as f:
+                    trial_metrics.append(json.load(f))
+        
+        if trial_metrics:
+            # Average the peak metrics for this trial
+            avg_trial = {"timestamp": trial_metrics[0]["timestamp"], "services": {"api": {}, "app": {}}}
+            for svc in ["api", "app"]:
+                for key in ["p99_ms", "p95_ms", "rps", "error_rate", "replicas", "cpu_cores", "sla_violation_rate"]:
+                    avg_trial["services"][svc][key] = np.mean([m["services"][svc].get(key, 0) for m in trial_metrics])
+            metrics.append(avg_trial)
     return metrics
 
 # Load all metrics
@@ -715,6 +798,8 @@ def analyze_mode(mode_name, metrics):
         report.append(f"    RPS:          {np.mean(rps_values):.2f} ± {np.std(rps_values):.2f}")
         report.append(f"    Error Rate:   {np.mean(error_values):.4f} ± {np.std(error_values):.4f}")
         report.append(f"    Replicas:     {np.mean(replica_values):.2f} ± {np.std(replica_values):.2f}")
+        sla_values = [m["services"][svc].get("sla_violation_rate", 0) for m in metrics]
+        report.append(f"    SLA Viol. Rt: {np.mean(sla_values):.2f} ± {np.std(sla_values):.2f} req/s")
 
 analyze_mode("BASELINE", baseline_metrics)
 analyze_mode("HPA", hpa_metrics)
